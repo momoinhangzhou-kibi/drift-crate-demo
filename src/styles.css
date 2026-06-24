@@ -41,6 +41,14 @@ button:active {
   box-shadow: 0 4px 0 #85c9d9;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: grayscale(0.35);
+  transform: none;
+  box-shadow: 0 6px 0 #b9d4dc;
+}
+
 h1,
 h2,
 h3,
@@ -53,6 +61,17 @@ p {
   display: grid;
   place-items: center;
   padding: 2rem;
+}
+
+.title-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.95), transparent 16rem),
+    radial-gradient(circle at 86% 18%, rgba(255, 245, 174, 0.72), transparent 12rem),
+    linear-gradient(180deg, #8ee4ff 0%, #dff8ff 52%, #62c3df 100%);
 }
 
 .start-card,
@@ -69,6 +88,138 @@ p {
   width: min(960px, 100%);
   padding: 2rem;
   text-align: center;
+}
+
+.title-card {
+  width: min(760px, 100%);
+  padding: 1.4rem;
+  text-align: center;
+  border: 2px solid rgba(255, 255, 255, 0.78);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 22px 70px rgba(36, 112, 149, 0.22);
+  backdrop-filter: blur(12px);
+}
+
+.title-card h1 {
+  margin-bottom: 0.4rem;
+  font-size: clamp(2.4rem, 8vw, 5rem);
+  color: #126d8b;
+}
+
+.title-subtitle {
+  margin-bottom: 0.35rem;
+  color: #24415f;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.title-tagline {
+  color: #557485;
+  font-weight: 800;
+}
+
+.title-art {
+  position: relative;
+  min-height: 250px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #8bdfff 0 56%, #35b5d8 57% 100%);
+}
+
+.title-sun,
+.title-cloud,
+.title-crate,
+.title-raft,
+.title-waves {
+  position: absolute;
+}
+
+.title-sun {
+  top: 1rem;
+  right: 1.3rem;
+  font-size: 3rem;
+}
+
+.title-cloud {
+  top: 1.6rem;
+  left: 1.4rem;
+  font-size: 2.8rem;
+}
+
+.title-crate {
+  left: calc(50% + 70px);
+  bottom: 4.9rem;
+  z-index: 2;
+  font-size: 3.4rem;
+  animation: bobSmall 2.6s ease-in-out infinite;
+}
+
+.title-raft {
+  left: 50%;
+  bottom: 4.2rem;
+  z-index: 1;
+  font-size: 5.8rem;
+  transform: translateX(-50%);
+  animation: bobSmall 2.6s ease-in-out infinite;
+}
+
+.title-waves {
+  left: 50%;
+  bottom: 1.4rem;
+  color: #ffffff;
+  font-size: 2.2rem;
+  font-weight: 900;
+  transform: translateX(-50%);
+}
+
+.title-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.save-summary,
+.save-slot {
+  border: 2px solid #d7f3fb;
+  border-radius: 18px;
+  padding: 0.8rem;
+  background: #f7fdff;
+  text-align: left;
+}
+
+.save-summary.filled,
+.save-slot.filled {
+  border-color: #9be7bd;
+  background: #f3fff8;
+}
+
+.save-summary p,
+.save-slot p {
+  margin: 0.25rem 0 0;
+  color: #557485;
+  font-weight: 800;
+}
+
+.save-slot {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.8rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+.save-slot small {
+  display: block;
+  margin-top: 0.35rem;
+  color: #1786a6;
+  font-weight: 900;
+}
+
+.menu-back {
+  margin-top: 1rem;
 }
 
 .eyebrow {
@@ -291,6 +442,85 @@ p {
   gap: 0.8rem;
 }
 
+.recent-panel {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 5;
+}
+
+.recent-panel h2 {
+  margin-bottom: 0;
+}
+
+.recent-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.recent-entry {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: start;
+  padding: 0.55rem 0.65rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 2px solid #d7f3fb;
+  line-height: 1.35;
+}
+
+.recent-entry.latest {
+  border-color: #ffbe32;
+  background: #fffdf2;
+  animation: recentPop 0.45s ease both;
+}
+
+.recent-entry.important {
+  box-shadow: 0 0 16px rgba(255, 190, 50, 0.22);
+}
+
+.recent-warning {
+  border-color: #ff9cad;
+  background: #fff7f7;
+}
+
+.recent-discovery,
+.recent-crate.important {
+  border-color: #ffca42;
+  background: #fffaf0;
+}
+
+.recent-cooking {
+  border-color: #9be7bd;
+}
+
+.recent-icon {
+  font-size: 1.25rem;
+}
+
+.recent-entry strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #24415f;
+  font-size: 0.88rem;
+}
+
+.recent-entry p {
+  margin: 0.15rem 0 0;
+  color: #557485;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.recent-actions {
+  display: grid;
+  grid-template-columns: 0.7fr 1fr;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
 .shop-row,
 .fish-trade-grid,
 .fishdex-grid {
@@ -380,6 +610,12 @@ p {
   background: #ffffff;
 }
 
+.item.edible-item {
+  border-color: #ff9cad;
+  background: linear-gradient(135deg, #fff8f8, #ffffff);
+  box-shadow: 0 0 0 3px rgba(255, 91, 107, 0.12);
+}
+
 .item.empty-item {
   opacity: 0.45;
 }
@@ -440,6 +676,25 @@ p {
 }
 
 .requirements .missing {
+  background: #fff1e8;
+  color: #a45317;
+}
+
+.fish-requirement {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.fish-requirement.met {
+  background: #e8fff4;
+  color: #168757;
+}
+
+.fish-requirement.missing {
   background: #fff1e8;
   color: #a45317;
 }
@@ -701,6 +956,251 @@ p {
   box-shadow: 0 0 48px rgba(255, 189, 48, 0.68), 0 24px 70px rgba(20, 65, 92, 0.28);
 }
 
+.wide-modal {
+  width: min(980px, 100%);
+  max-height: min(86vh, 780px);
+  overflow: auto;
+  border: 4px solid #ffffff;
+  border-radius: 24px;
+  padding: 1.2rem;
+  background: #f7fdff;
+  box-shadow: 0 24px 70px rgba(20, 65, 92, 0.28);
+  animation: fadeIn 0.25s ease both;
+}
+
+.modal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.modal-heading h2 {
+  margin-bottom: 0;
+}
+
+.compact-button {
+  padding: 0.55rem 0.8rem;
+  box-shadow: 0 6px 0 #9bd6e4;
+}
+
+.recipe-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.recipe-card {
+  position: relative;
+  display: grid;
+  gap: 0.75rem;
+  border: 2px solid #d7f3fb;
+  border-radius: 18px;
+  padding: 0.9rem;
+  background: #ffffff;
+}
+
+.recipe-card.craftable {
+  border-color: #ff9cad;
+  box-shadow: 0 0 0 4px rgba(255, 91, 107, 0.12);
+}
+
+.recipe-title {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  align-items: start;
+}
+
+.recipe-title > span {
+  font-size: 2.2rem;
+}
+
+.recipe-title h3,
+.food-row h3 {
+  margin-bottom: 0.25rem;
+}
+
+.recipe-title p,
+.recipe-card p,
+.food-row p {
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+.recipe-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.recipe-result {
+  display: grid;
+  gap: 0.3rem;
+  color: #17647b;
+  font-weight: 900;
+}
+
+.primary-action {
+  color: #ffffff;
+  background: #ff6b7a;
+  box-shadow: 0 8px 0 #d84d5b;
+}
+
+.food-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.food-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.8rem;
+  align-items: center;
+  border: 2px solid #ffd0d8;
+  border-radius: 18px;
+  padding: 0.8rem;
+  background: #ffffff;
+}
+
+.food-emoji {
+  font-size: 2.4rem;
+}
+
+.food-row small {
+  color: #ff5b6b;
+  font-size: 0.82rem;
+}
+
+.food-row strong {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: #168757;
+}
+
+.sell-modal {
+  width: min(1080px, 100%);
+}
+
+.sell-tools,
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-bottom: 0.8rem;
+}
+
+.sell-tools button,
+.modal-actions button {
+  box-shadow: 0 6px 0 #9bd6e4;
+}
+
+.sell-fish-list {
+  display: grid;
+  gap: 0.7rem;
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.sell-fish-row {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(170px, 0.8fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 2px solid #d7f3fb;
+  border-radius: 18px;
+  padding: 0.75rem;
+  background: #ffffff;
+}
+
+.sell-fish-row.selected {
+  border-color: #71d5e8;
+  background: #f0fcff;
+}
+
+.sell-fish-row.rare-keep {
+  border-color: #ffe1a1;
+}
+
+.sell-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1.7rem;
+  font-weight: 900;
+}
+
+.sell-check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #ff6b7a;
+}
+
+.sell-fish-main p,
+.sell-price span,
+.sell-summary p,
+.empty-sell-state p {
+  margin: 0.2rem 0 0;
+  color: #557485;
+  font-weight: 800;
+}
+
+.sell-price {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.amount-stepper {
+  display: grid;
+  grid-template-columns: 36px 64px 36px;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.amount-stepper button {
+  padding: 0.55rem 0;
+  border-radius: 10px;
+  box-shadow: 0 5px 0 #9bd6e4;
+}
+
+.amount-stepper input {
+  width: 100%;
+  border: 2px solid #d7f3fb;
+  border-radius: 10px;
+  padding: 0.55rem 0.35rem;
+  color: #24415f;
+  background: #f7fdff;
+  font: inherit;
+  font-weight: 900;
+  text-align: center;
+}
+
+.sell-summary {
+  margin: 0.9rem 0;
+  border: 2px solid #9be7bd;
+  border-radius: 18px;
+  padding: 0.8rem;
+  background: #f3fff8;
+}
+
+.sell-summary.has-rare {
+  border-color: #ffbe32;
+  background: #fffaf0;
+}
+
+.rare-warning {
+  color: #a45317 !important;
+}
+
+.empty-sell-state {
+  border: 2px dashed #bfeaf4;
+  border-radius: 18px;
+  padding: 1rem;
+  text-align: center;
+  background: #f7fdff;
+}
+
 @keyframes bob {
   0%,
   100% {
@@ -708,6 +1208,16 @@ p {
   }
   50% {
     transform: translateX(-50%) translateY(-10px);
+  }
+}
+
+@keyframes bobSmall {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-8px) rotate(2deg);
   }
 }
 
@@ -742,6 +1252,17 @@ p {
   }
 }
 
+@keyframes recentPop {
+  from {
+    opacity: 0.4;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 1100px) {
   .topbar,
   .layout,
@@ -756,17 +1277,42 @@ p {
   .fishdex-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .sell-fish-row {
+    grid-template-columns: auto 1fr;
+  }
+
+  .sell-price,
+  .amount-stepper {
+    grid-column: 2;
+  }
+
+  .recent-panel {
+    position: static;
+  }
 }
 
 @media (max-width: 720px) {
   .talent-grid,
   .actions,
+  .title-actions,
   .status-grid,
   .shop-row,
   .fish-trade-grid,
   .fishdex-grid,
-  .inventory-grid {
+  .inventory-grid,
+  .recipe-grid,
+  .food-row,
+  .save-slot,
+  .sell-fish-row,
+  .sell-price,
+  .recent-actions {
     grid-template-columns: 1fr;
+  }
+
+  .amount-stepper {
+    grid-template-columns: 44px 1fr 44px;
+    grid-column: auto;
   }
 
   .app-shell,

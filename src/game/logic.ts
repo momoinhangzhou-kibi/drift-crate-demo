@@ -5,14 +5,30 @@ import {
   createFishCollection,
   createInitialState,
   fishList,
+  foodItems,
   furniturePool,
   itemNames,
+  recipes,
   upgradeRequirements,
   weatherList,
 } from "./data";
-import { BoatLevel, Fish, FishRarity, GameState, ItemId, LogType, Rarity, TalentId, TradePrices } from "./types";
+import { BoatLevel, Fish, FishRarity, GameState, ItemId, LogType, Rarity, Recipe, TalentId, TradePrices } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
+
+export interface SaveSummary {
+  exists: boolean;
+  day?: number;
+  boatLevel?: BoatLevel;
+  coins?: number;
+  savedAt?: string;
+}
+
+interface SavePayload {
+  version: 2;
+  savedAt: string;
+  state: GameState;
+}
 
 function clamp(value: number, min = 0, max = 100) {
   return Math.max(min, Math.min(max, value));
@@ -39,6 +55,10 @@ function addLog(
     ...state,
     logs: [{ id: crypto.randomUUID(), day: state.day, type, title, message, rewards, important, isNew }, ...state.logs].slice(0, 30),
   };
+}
+
+function addSystemLog(state: GameState, message: string): GameState {
+  return addLog(state, "event", "系统", message, [], true);
 }
 
 function addItem(state: GameState, itemId: ItemId, amount: number): GameState {
@@ -80,6 +100,66 @@ function describeMissingItems(state: GameState, cost: Partial<Record<ItemId, num
 
   if (state.coins < coins) missing.push(`贝壳币 x${coins - state.coins}`);
   return missing;
+}
+
+function formatMissingItems(state: GameState, cost: Partial<Record<ItemId, number>>) {
+  return Object.entries(cost)
+    .map(([itemId, amount]) => {
+      const id = itemId as ItemId;
+      const need = amount ?? 0;
+      const owned = state.inventory[id] ?? 0;
+      return owned >= need ? "" : `${itemNames[id]} ×${need - owned}`;
+    })
+    .filter(Boolean);
+}
+
+function getFishCandidates(state: GameState, recipe: Recipe) {
+  if (!recipe.fishCount) return [];
+
+  const allowedRarities = recipe.rareFishOnly ? ["Rare", "Epic", "Legendary"] : ["Common", "Uncommon"];
+  const candidates: Fish[] = [];
+
+  fishList
+    .filter((fishItem) => allowedRarities.includes(fishItem.rarity))
+    .sort((a, b) => a.basePrice - b.basePrice)
+    .forEach((fishItem) => {
+      const count = state.fishCollection[fishItem.id]?.count ?? 0;
+      for (let i = 0; i < count; i += 1) candidates.push(fishItem);
+    });
+
+  return candidates;
+}
+
+function getRecipeById(recipeId: string) {
+  return recipes.find((recipe) => recipe.id === recipeId);
+}
+
+export function getRecipeStatus(state: GameState, recipe: Recipe) {
+  const missing = formatMissingItems(state, recipe.fixedCost);
+  const fishCandidates = getFishCandidates(state, recipe);
+  const needFish = recipe.fishCount ?? 0;
+
+  if (fishCandidates.length < needFish) {
+    missing.push(recipe.rareFishOnly ? `Rare以上鱼 ×${needFish - fishCandidates.length}` : `Common/Uncommon鱼 ×${needFish - fishCandidates.length}`);
+  }
+
+  return {
+    canCook: missing.length === 0,
+    missing,
+    selectedFish: fishCandidates.slice(0, needFish),
+  };
+}
+
+export function canCookRecipe(state: GameState, recipe: Recipe) {
+  return getRecipeStatus(state, recipe).canCook;
+}
+
+export function canCookAnyRecipe(state: GameState) {
+  return recipes.some((recipe) => canCookRecipe(state, recipe));
+}
+
+export function hasEdibleFood(state: GameState) {
+  return foodItems.some((food) => (state.inventory[food.id] ?? 0) > 0);
 }
 
 function weightedRarity(state: GameState): FishRarity {
@@ -186,7 +266,8 @@ export function canUpgradeBoat(state: GameState) {
 }
 
 export function canCookHotpot(state: GameState) {
-  return describeMissingItems(state, { hotpotBase: 1, veggiePack: 1, meatSlices: 1, water: 1 }).length === 0;
+  const hotpot = getRecipeById("drift-hotpot");
+  return hotpot ? canCookRecipe(state, hotpot) : false;
 }
 
 export function hasFishToSell(state: GameState) {
@@ -323,6 +404,34 @@ export function sellAllFish(state: GameState): GameState {
   return addLog({ ...state, fishCollection, coins: state.coins + earned }, "trade", "出售全部鱼获", `卖出全部鱼获 x${count}，获得 ${earned} 贝壳币。`, [`+${earned} 贝壳币`], true);
 }
 
+export function sellSelectedFish(state: GameState, selections: Record<string, number>): GameState {
+  const bonus = state.talent === "trading" ? 1.2 : 1;
+  const fishCollection = { ...state.fishCollection };
+  const sold: string[] = [];
+  let earned = 0;
+  let soldCount = 0;
+  let soldRareFish = false;
+
+  fishList.forEach((fishItem) => {
+    const requested = Math.floor(selections[fishItem.id] ?? 0);
+    const entry = fishCollection[fishItem.id];
+    if (!entry || entry.count <= 0 || requested <= 0) return;
+
+    const amount = Math.min(requested, entry.count);
+    const price = state.fishPrices[fishItem.id] ?? fishItem.basePrice;
+    earned += Math.floor(amount * price * bonus);
+    soldCount += amount;
+    soldRareFish = soldRareFish || fishItem.rarity === "Rare" || fishItem.rarity === "Epic" || fishItem.rarity === "Legendary";
+    sold.push(`${fishItem.name} ×${amount}`);
+    fishCollection[fishItem.id] = { ...entry, count: entry.count - amount };
+  });
+
+  if (soldCount === 0) return addLog(state, "warning", "海上交易", "请选择至少一种鱼获。");
+
+  const message = `卖出${sold.join("、")}，获得 ${earned} 贝壳币。${soldRareFish ? "希望你不是手滑。" : ""}`;
+  return addLog({ ...state, fishCollection, coins: state.coins + earned }, "trade", "出售鱼获", message, [`+${earned} 贝壳币`], soldRareFish);
+}
+
 export function buyItem(state: GameState, itemId: "commonCrate" | "premiumCrate" | "water" | "wood"): GameState {
   const prices = { commonCrate: 30, premiumCrate: 100, water: 10, wood: 5 };
   const price = prices[itemId];
@@ -333,14 +442,67 @@ export function buyItem(state: GameState, itemId: "commonCrate" | "premiumCrate"
   return addLog(next, "trade", "购买物资", `你买下了 ${itemNames[itemId]} x1。`, [itemNames[itemId]]);
 }
 
+export function cookRecipe(state: GameState, recipeId: string): GameState {
+  const recipe = getRecipeById(recipeId);
+  if (!recipe) return addLog(state, "warning", "未知食谱", "潮湿的菜谱糊成一团，看不清要做什么。");
+
+  const status = getRecipeStatus(state, recipe);
+  if (!status.canCook) {
+    return addLog(state, "warning", "材料不足", `还缺少${status.missing.join("、")}，无法制作${recipe.name}。`);
+  }
+
+  let next = spendItems(state, recipe.fixedCost);
+  const fishCollection = { ...next.fishCollection };
+  status.selectedFish.forEach((fishItem) => {
+    const entry = fishCollection[fishItem.id];
+    if (!entry) return;
+    fishCollection[fishItem.id] = { ...entry, count: Math.max(0, entry.count - 1) };
+  });
+
+  next = addItem({ ...next, fishCollection }, recipe.output, 1);
+
+  const usedFishNames = status.selectedFish.map((fishItem) => `「${fishItem.name}」`);
+  const message =
+    recipe.id === "grilled-fish" && usedFishNames.length
+      ? `你用${usedFishNames[0]}做了一份烤鱼。`
+      : recipe.id === "fish-soup" && usedFishNames.length
+        ? `你用${usedFishNames[0]}煮好了一碗鱼汤，热气让小木筏都温暖起来。`
+        : recipe.id === "seafood-skewer" && usedFishNames.length
+          ? `你用${usedFishNames.join("和")}做了一份海鲜串，闻起来很香。`
+          : recipe.id === "deluxe-seafood-pot" && usedFishNames.length
+            ? `你用${usedFishNames[0]}做了一份豪华海鲜锅。`
+            : "你做好了一份漂流火锅，香味飘过了整片海面。";
+
+  return addLog(next, "cooking", "料理", message, [`${recipe.emoji} ${recipe.name} x1`], recipe.id === "drift-hotpot" || recipe.id === "deluxe-seafood-pot");
+}
+
 export function cookHotpot(state: GameState): GameState {
-  const cost: Partial<Record<ItemId, number>> = { hotpotBase: 1, veggiePack: 1, meatSlices: 1, water: 1 };
-  const missing = describeMissingItems(state, cost);
+  return cookRecipe(state, "drift-hotpot");
+}
 
-  if (missing.length) return addLog(state, "warning", "材料不足", `漂流火锅还缺：${missing.join("、")}。`);
+export function eatFood(state: GameState, foodId: ItemId): GameState {
+  const food = foodItems.find((item) => item.id === foodId);
+  if (!food) return addLog(state, "warning", "进食", "这个东西怎么看都不像能吃的。");
+  if ((state.inventory[food.id] ?? 0) <= 0) return addLog(state, "warning", "进食", "背包里没有可以吃的食物。");
+  if (state.hunger >= 95) return addLog(state, "warning", "进食", "你现在还不饿，决定先把食物存起来。");
 
-  const next = spendItems(state, cost);
-  return addLog({ ...next, hunger: clamp(next.hunger + 40), mood: clamp(next.mood + 30) }, "cooking", "漂流火锅", "你煮了一锅热腾腾的漂流火锅。", ["Hunger +40", "Mood +30"], true);
+  const next = addItem(state, food.id, -1);
+  const message =
+    food.id === "fishSoup"
+      ? `你喝下鱼汤，胃里暖暖的。Hunger +${food.hunger}，Mood +${food.mood}。`
+      : `你吃掉了${food.name}。Hunger +${food.hunger}，Mood +${food.mood}。`;
+
+  return addLog(
+    { ...next, hunger: clamp(next.hunger + food.hunger), mood: clamp(next.mood + food.mood) },
+    "cooking",
+    "进食",
+    message,
+    [`Hunger +${food.hunger}`, `Mood +${food.mood}`],
+  );
+}
+
+export function noteNoFood(state: GameState): GameState {
+  return addLog(state, "warning", "进食", "你翻了翻背包，但没有可以吃的东西。");
 }
 
 export function upgradeBoat(state: GameState): GameState {
@@ -436,19 +598,58 @@ function migrateState(raw: Partial<GameState>): GameState {
   return { ...initial, ...raw, inventory, fishCollection, fishPrices, logs };
 }
 
+function readSavedPayload(): { state: GameState; savedAt?: string } | undefined {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return undefined;
+
+  try {
+    const parsed = JSON.parse(saved);
+    if (parsed?.state) return { state: migrateState(parsed.state), savedAt: parsed.savedAt };
+    return { state: migrateState(parsed) };
+  } catch {
+    return undefined;
+  }
+}
+
 export function saveGame(state: GameState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const payload: SavePayload = {
+    version: 2,
+    savedAt: new Date().toISOString(),
+    state,
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+export function saveGameWithLog(state: GameState): GameState {
+  const next = addSystemLog(state, "💾 游戏已保存。");
+  saveGame(next);
+  return next;
+}
+
+export function getSaveSummary(): SaveSummary {
+  const payload = readSavedPayload();
+  if (!payload?.state?.started) return { exists: false };
+
+  return {
+    exists: true,
+    day: payload.state.day,
+    boatLevel: payload.state.boatLevel,
+    coins: payload.state.coins,
+    savedAt: payload.savedAt,
+  };
+}
+
+export function hasSavedGame() {
+  return getSaveSummary().exists;
 }
 
 export function loadGame(): GameState {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return createInitialState();
+  const payload = readSavedPayload();
+  return payload?.state ?? createInitialState();
+}
 
-  try {
-    return migrateState(JSON.parse(saved));
-  } catch {
-    return createInitialState();
-  }
+export function loadGameWithLog(): GameState {
+  return addSystemLog(loadGame(), "📂 已读取存档，欢迎回到漂流生活。");
 }
 
 export function resetGame(): GameState {
