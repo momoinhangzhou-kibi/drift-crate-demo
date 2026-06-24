@@ -30,7 +30,7 @@ import {
   upgradeBoat,
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
-import { Fish, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, ShopItem, TalentId } from "./game/types";
+import { Fish, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Recipe, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
   "wood",
@@ -435,7 +435,7 @@ function App() {
         </section>
       </section>
 
-      {showCrate && state.lastCard && <CrateModal card={state.lastCard} crateType={state.lastCrateType ?? "commonCrate"} onClose={() => setShowCrate(false)} />}
+      {showCrate && <CrateModal state={state} onClose={() => setShowCrate(false)} />}
       {showCooking && (
         <CookingModal
           state={state}
@@ -930,15 +930,18 @@ function FishDexCard({ fish, state }: { fish: Fish; state: GameState }) {
   );
 }
 
-function CrateModal({ card, crateType, onClose }: { card: { name: string; rarity: Rarity; emoji: string; description: string }; crateType: "commonCrate" | "premiumCrate"; onClose: () => void }) {
+function CrateModal({ state, onClose }: { state: GameState; onClose: () => void }) {
+  const crateType = state.lastCrateType ?? "commonCrate";
+  const drops = state.lastCrateDrops ?? [];
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <section className={`crate-modal rarity-${card.rarity.toLowerCase()}`} onClick={(event) => event.stopPropagation()}>
+      <section className="crate-modal crate-drops-modal" onClick={(event) => event.stopPropagation()}>
         <p className="eyebrow">{crateType === "premiumCrate" ? "高级补给包" : "普通补给包"}</p>
-        <span className="modal-emoji">{card.emoji}</span>
-        <h2>{card.name}</h2>
-        <strong>{card.rarity}</strong>
-        <p>{card.description}</p>
+        <span className="modal-emoji">{crateType === "premiumCrate" ? "💝" : "🎁"}</span>
+        <h2>本次运气：{state.lastCrateLuck ?? "普通"}</h2>
+        <div className="drop-list">
+          {drops.length ? drops.map((drop) => <span key={drop}>{drop}</span>) : <p>补给箱空空如也，可能被潮水打湿了。</p>}
+        </div>
         <button onClick={onClose}>收下</button>
       </section>
     </div>

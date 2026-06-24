@@ -328,5 +328,9 @@ export function createShopStock(day: number): ShopItem[] {
   };
   const pool = shopCatalog.filter((item) => early ? ["materials", "food", "hygiene", "tools", "special"].includes(item.category) && item.rarity !== "Epic" : true);
   const picked = pool.filter((item) => rand() < (item.rarity === "Epic" ? 0.18 : item.rarity === "Rare" ? 0.35 : 0.55)).slice(0, early ? 10 : 14);
-  return (picked.length ? picked : pool.slice(0, early ? 10 : 14)).map((item) => ({ ...item, price: Math.max(1, Math.round(item.price * (0.9 + rand() * 0.25))) }));
+  const guaranteed = shopCatalog.filter((item) => item.id === "commonCrate" || (!early && item.id === "premiumCrate"));
+  const merged = [...guaranteed, ...(picked.length ? picked : pool.slice(0, early ? 10 : 14))].filter(
+    (item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index,
+  );
+  return merged.map((item) => ({ ...item, price: Math.max(1, Math.round(item.price * (0.9 + rand() * 0.25))) }));
 }
