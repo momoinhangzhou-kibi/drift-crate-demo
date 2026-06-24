@@ -3,7 +3,39 @@ export type ItemId =
   | "plastic"
   | "rope"
   | "scrap"
+  | "screw"
+  | "tarp"
+  | "tape"
   | "water"
+  | "biscuit"
+  | "cannedFood"
+  | "ramen"
+  | "chocolate"
+  | "compressedBiscuit"
+  | "wrench"
+  | "lighter"
+  | "flashlight"
+  | "toolbox"
+  | "repairTape"
+  | "toiletPaper"
+  | "wetWipes"
+  | "sanitaryPad"
+  | "towel"
+  | "soap"
+  | "medkit"
+  | "sturdyRod"
+  | "advancedRodItem"
+  | "fishingNet"
+  | "waterproofBackpack"
+  | "solarPurifier"
+  | "foldingChair"
+  | "shellLamp"
+  | "waterproofMattress"
+  | "simpleToilet"
+  | "storageBox"
+  | "mysteryBottle"
+  | "luckyShell"
+  | "merchantCoupon"
   | "hotpotBase"
   | "veggiePack"
   | "meatSlices"
@@ -21,9 +53,10 @@ export type ItemId =
 
 export type Rarity = "Common" | "Rare" | "Epic" | "Legendary";
 export type FishRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary";
-export type Weather = "晴天" | "阴天" | "暴雨" | "大雾";
+export type Weather = "晴天" | "阴天" | "小雨" | "暴雨" | "大雾" | "风暴" | "高温" | "寒潮";
 export type BoatLevel = 1 | 2 | 3 | 4;
 export type TalentId = "fishing" | "trading" | "lucky" | "crafting";
+export type ItemCategory = "materials" | "food" | "tools" | "hygiene" | "furniture" | "equipment" | "special";
 
 export interface Fish {
   id: string;
@@ -69,6 +102,20 @@ export interface Food {
   hunger: number;
   mood: number;
   description: string;
+}
+
+export interface ItemMeta {
+  id: ItemId;
+  category: ItemCategory;
+  rarity: Rarity;
+}
+
+export interface ShopItem {
+  id: ItemId;
+  category: ItemCategory;
+  rarity: Rarity;
+  price: number;
+  quantity: number;
 }
 
 export interface Recipe {
@@ -132,7 +179,12 @@ export interface GameState {
   fishPrices: FishPrices;
   tradePrices: TradePrices;
   logs: LogEntry[];
+  shopStock: ShopItem[];
+  gameOverReason?: string;
+  tutorialSeen?: boolean;
   lastCard?: Card;
+  lastCrateDrops?: string[];
+  lastCrateLuck?: string;
   lastCrateType?: "commonCrate" | "premiumCrate";
   newestFishId?: string;
 }

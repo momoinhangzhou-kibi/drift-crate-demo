@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
-import { boatNames, fishList, foodItems, itemEmoji, itemNames, recipes, talents } from "./game/data";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { boatNames, fishList, foodItems, itemEmoji, itemMeta, itemNames, recipes, talents } from "./game/data";
 import {
-  buyItem,
+  buyShopItem,
   canCookAnyRecipe,
   canUpgradeBoat,
   cookRecipe,
@@ -13,6 +13,7 @@ import {
   getMissingRequirements,
   getUpgradeCost,
   getSaveSummary,
+  getSurvivalInfo,
   hasEdibleFood,
   hasFishToSell,
   hasSavedGame,
@@ -29,7 +30,7 @@ import {
   upgradeBoat,
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
-import { Fish, Food, GameState, ItemId, LogEntry, LogType, Rarity, Recipe, TalentId } from "./game/types";
+import { Fish, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
   "wood",
@@ -46,6 +47,7 @@ const materialOrder: ItemId[] = [
 ];
 
 const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot"];
+const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
 
 type ViewState = "title" | "talentSelect" | "playing" | "loadMenu";
 
@@ -70,6 +72,9 @@ function App() {
   const [showCooking, setShowCooking] = useState(false);
   const [showEating, setShowEating] = useState(false);
   const [showSelling, setShowSelling] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [musicOn, setMusicOn] = useState(false);
+  const [inventoryFilter, setInventoryFilter] = useState<ItemCategory | "all">("all");
   const [sellFocusFishId, setSellFocusFishId] = useState<string | undefined>();
   const [recentExpanded, setRecentExpanded] = useState(false);
   const logPanelRef = useRef<HTMLElement | null>(null);
@@ -83,6 +88,34 @@ function App() {
   const readyToSell = hasFishToSell(state);
   const discoveredCount = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
   const completion = Math.round((discoveredCount / fishList.length) * 100);
+  const survival = getSurvivalInfo(state);
+
+  useEffect(() => {
+    if (!musicOn) return;
+    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const audio = new AudioContextClass();
+    const gain = audio.createGain();
+    gain.gain.value = 0.045;
+    gain.connect(audio.destination);
+    const notes = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 783.99, 880];
+    let index = 0;
+    const play = () => {
+      const osc = audio.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = notes[index % notes.length];
+      osc.connect(gain);
+      osc.start();
+      osc.stop(audio.currentTime + 0.18);
+      index += 1;
+    };
+    play();
+    const timer = window.setInterval(play, 420);
+    return () => {
+      window.clearInterval(timer);
+      audio.close();
+    };
+  }, [musicOn]);
 
   const update = (next: GameState) => setState(next);
 
@@ -95,6 +128,7 @@ function App() {
 
   const chooseTalent = (talent: TalentId) => {
     setState(startGame(talent));
+    setShowTutorial(true);
     setView("playing");
   };
 
@@ -168,6 +202,8 @@ function App() {
         onNewGame={startNewGameFlow}
         onContinue={continueGame}
         onLoadMenu={() => setView("loadMenu")}
+        musicOn={musicOn}
+        onToggleMusic={() => setMusicOn((value) => !value)}
       />
     );
   }
@@ -204,46 +240,67 @@ function App() {
     );
   }
 
+  if (state.gameOverReason) {
+    return <GameOverScreen state={state} completion={completion} onRestart={() => { setState(resetGame()); setView("talentSelect"); }} onTitle={() => setView("title")} />;
+  }
+
   return (
-    <main className="app-shell">
-      <header className="topbar">
+    <main className={`app-shell game-home weather-${state.weather}`}>
+      <header className="topbar game-topbar">
         <div>
           <p className="eyebrow">Drift Crate</p>
           <h1>漂流补给箱</h1>
           <button className="compact-button" onClick={() => setView("title")}>返回主菜单</button>
         </div>
-        <div className="status-grid">
+        <div className="status-grid hud-grid">
           <Status label="Day" value={state.day} />
+          <Status label="阶段" value={survival.phase} />
+          <Status label="灾害倒计时" value={`${survival.nextDisasterIn}天`} danger={survival.nextDisasterIn <= 2 && state.day >= 8} />
+          <Status label="危险等级" value={survival.danger} danger={survival.danger === "高"} />
           <Status label="Weather" value={state.weather} />
           <Status label="Hunger" value={state.hunger} danger={state.hunger <= 15} />
           <Status label="Mood" value={state.mood} />
           <Status label="Coins" value={`${state.coins} 🐚`} />
           <Status label="Boat HP" value={`${state.boatHp}/${state.boatMaxHp}`} danger={state.boatHp <= 15} />
           <Status label="Boat Level" value={`Lv.${state.boatLevel}`} />
+          <Status label="音乐" value={musicOn ? "开" : "关"} />
         </div>
       </header>
 
-      <section className="layout">
+      <section className="game-layout">
         <div className="main-column">
-          <section className="boat-panel panel">
-            <div className={`boat-scene level-${state.boatLevel}`}>
-              <div className="sun">☀️</div>
-              <div className="boat">
-                <div className="boat-roof">{state.boatLevel >= 3 ? "🏠" : state.boatLevel === 2 ? "⛵" : "🪵"}</div>
+          <section className="boat-panel stage-panel">
+            <div className={`boat-scene level-${state.boatLevel} scene-weather-${state.weather}`}>
+              <div className="stage-skybits">
+                <span className="sun">{state.weather === "寒潮" ? "🌙" : "☀️"}</span>
+                <span className="stage-cloud cloud-one">☁️</span>
+                <span className="stage-cloud cloud-two">☁️</span>
+                <span className="stage-gull">⌁</span>
+                <span className="stage-island">🏝️</span>
+                <span className="stage-ship">⛵</span>
+                <span className="stage-bottle">🍾</span>
+                {(state.weather === "暴雨" || state.weather === "风暴") && <span className="stage-rain">///// ⚡ /////</span>}
+                {state.weather === "大雾" && <span className="fog-layer"></span>}
+              </div>
+              <div className={`boat home-level-${state.boatLevel}`}>
+                <div className="boat-roof">{state.boatLevel >= 4 ? "🏪✨" : state.boatLevel >= 3 ? "🏠🪟" : state.boatLevel === 2 ? "⛵🚩" : "🪵📦"}</div>
                 <div className="boat-body">{boatNames[state.boatLevel]}</div>
+                <div className="furniture-strip">{state.furniture.slice(0, 6).map((item) => <span key={item}>{furnitureIcon(item)}</span>)}</div>
                 <div className="waves">≈≈≈≈≈≈≈≈≈≈≈</div>
               </div>
             </div>
             <div className="boat-info">
               <h2>{boatNames[state.boatLevel]}</h2>
               <p>天赋：{selectedTalent ? `${selectedTalent.emoji} ${selectedTalent.name}` : "未选择"}</p>
+              <p>状态：Hunger {survival.hungerState} / Mood {survival.moodState} / 船体{survival.boatState}</p>
+              <p>当前钓具：{state.equipment.includes("goldenRod") ? "黄金鱼竿" : state.equipment.includes("advancedRodItem") || state.equipment.includes("advancedRod") ? "高级钓鱼竿" : state.equipment.includes("sturdyRod") ? "结实钓鱼竿" : "旧钓鱼竿"}</p>
               <h3>下次升级</h3>
               {state.boatLevel >= 4 ? <p>已达到 Demo 最高等级。</p> : <RequirementList state={state} items={upgradeCost.items} coins={upgradeCost.coins} />}
               {state.boatHp <= 0 && <strong className="warning">载具严重损坏，需要尽快修理。</strong>}
             </div>
           </section>
 
-          <section className="actions panel">
+          <section className="actions panel action-dock">
             <ActionButton onClick={() => update(fish(state))}>🎣 钓鱼</ActionButton>
             <ActionButton onClick={() => update(salvage(state))}>🪝 打捞</ActionButton>
             <ActionButton badge={state.inventory.commonCrate > 0 ? "可开" : undefined} onClick={() => openCrateAndShow("commonCrate")}>
@@ -279,12 +336,7 @@ function App() {
                 <FishTradeCard key={fishItem.id} fish={fishItem} state={state} onSell={() => openSellPanel(fishItem.id)} />
               ))}
             </div>
-            <div className="shop-row">
-              <button onClick={() => update(buyItem(state, "commonCrate"))}>买普通补给包 30 🐚</button>
-              <button onClick={() => update(buyItem(state, "premiumCrate"))}>买高级补给包 100 🐚</button>
-              <button onClick={() => update(buyItem(state, "water"))}>买淡水 10 🐚</button>
-              <button onClick={() => update(buyItem(state, "wood"))}>买木板 5 🐚</button>
-            </div>
+            <TideShop state={state} onBuy={(item) => window.confirm(`购买 ${itemNames[item.id]}，花费 ${item.price} 贝壳币？`) && update(buyShopItem(state, item.id))} />
           </section>
 
           <section className="panel fishdex-panel">
@@ -301,7 +353,7 @@ function App() {
           </section>
         </div>
 
-        <aside className="side-column">
+        <aside className="side-column game-side">
           <RecentActivity
             logs={state.logs}
             expanded={recentExpanded}
@@ -311,25 +363,7 @@ function App() {
 
           <section className="panel inventory">
             <h2>🎒 背包</h2>
-            <div className="inventory-grid">
-              {materialOrder.map((itemId) => (
-                <div className={`item ${state.inventory[itemId] > 0 ? "has-item" : "empty-item"}`} key={itemId}>
-                  {(itemId === "commonCrate" || itemId === "premiumCrate") && state.inventory[itemId] > 0 && <span className="item-badge">可开</span>}
-                  {itemId === "furnitureTicket" && state.inventory[itemId] > 0 && <span className="item-badge">可用</span>}
-                  <span>{itemEmoji[itemId]}</span>
-                  <strong>{itemNames[itemId]}</strong>
-                  <em>x{state.inventory[itemId]}</em>
-                </div>
-              ))}
-              {foodOrder.map((itemId) => (
-                <div className={`item food-item ${state.inventory[itemId] > 0 ? "has-item edible-item" : "empty-item"}`} key={itemId}>
-                  {state.inventory[itemId] > 0 && <span className="item-badge">可食用</span>}
-                  <span>{itemEmoji[itemId]}</span>
-                  <strong>{itemNames[itemId]}</strong>
-                  <em>x{state.inventory[itemId]}</em>
-                </div>
-              ))}
-            </div>
+            <InventoryPanel state={state} filter={inventoryFilter} onFilter={setInventoryFilter} />
           </section>
 
           <section className="panel crate-panel">
@@ -435,32 +469,80 @@ function App() {
           }}
         />
       )}
+      {showTutorial && <TutorialModal onClose={(never) => { setShowTutorial(false); if (never) update({ ...state, tutorialSeen: true }); }} />}
     </main>
   );
 }
 
-function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadMenu }: { saveSummary: SaveSummary; hasActiveRun: boolean; onNewGame: () => void; onContinue: () => void; onLoadMenu: () => void }) {
+function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadMenu, musicOn, onToggleMusic }: { saveSummary: SaveSummary; hasActiveRun: boolean; onNewGame: () => void; onContinue: () => void; onLoadMenu: () => void; musicOn: boolean; onToggleMusic: () => void }) {
+  const snapshot = loadGame();
+  const info = getSurvivalInfo(snapshot);
   return (
     <main className="title-screen">
-      <section className="title-card">
-        <div className="title-art" aria-hidden="true">
-          <div className="title-sun">☀️</div>
-          <div className="title-cloud">☁️</div>
-          <div className="title-crate">🎁</div>
-          <div className="title-raft">🪵</div>
-          <div className="title-waves">≈≈≈≈≈≈≈≈≈≈≈≈</div>
+      <div className="title-sky" aria-hidden="true">
+        <span className="title-sun">☀️</span><span className="cloud cloud-a">☁️</span><span className="cloud cloud-b">☁️</span>
+        <span className="gull gull-a">⌁</span><span className="gull gull-b">⌁</span><span className="far-boat">⛵</span>
+      </div>
+      <section className="title-menu-card">
+        <div className="version-pill">当前版本 v0.4.0</div>
+        <div className="title-logo">
+          <p className="eyebrow">DRIFT CRATE</p>
+          <h1>漂流补给箱</h1>
+          <p>海上漂流、钓鱼囤货、开箱求生。</p>
         </div>
-        <p className="eyebrow">DRIFT CRATE</p>
-        <h1>漂流补给箱</h1>
-        <p className="title-subtitle">海上漂流、钓鱼囤货、开箱求生的轻松冒险。</p>
-        <p className="title-tagline">今天也来海上开一箱补给吧。</p>
         <div className="title-actions">
-          <button className="primary-action" onClick={onNewGame}>开始新游戏</button>
-          <button disabled={!saveSummary.exists && !hasActiveRun} onClick={onContinue}>{hasActiveRun ? "返回游戏" : "继续游戏"}</button>
-          <button onClick={onLoadMenu}>读取存档</button>
+          <button className="title-main-button" onClick={onNewGame}>▶ 开始新游戏</button>
+          <button disabled={!saveSummary.exists && !hasActiveRun} onClick={onContinue}>📂 {hasActiveRun ? "返回游戏" : "继续游戏"}</button>
+          <button onClick={onLoadMenu}>💾 读取存档</button>
+          <button onClick={onContinue}>🏆 图鉴</button>
+          <button onClick={onToggleMusic}>🎵 音乐 {musicOn ? "开" : "关"}</button>
+          <button onClick={onToggleMusic}>⚙ 设置</button>
         </div>
         <SaveSummaryCard saveSummary={saveSummary} />
       </section>
+      <section className="sea-base" aria-label="漂流补给站主视觉">
+        <div className="illustration-card">
+          <div className="base-sunbeam"></div>
+          <div className="seagull-shape gull-left"></div>
+          <div className="seagull-shape gull-right"></div>
+          <div className="base-platform">
+            <div className="platform-plank p1"></div>
+            <div className="platform-plank p2"></div>
+            <div className="platform-plank p3"></div>
+            <div className="platform-plank p4"></div>
+            <div className="rope-front"></div>
+            <div className="float float-a"></div>
+            <div className="float float-b"></div>
+            <div className="string-lights"><i></i><i></i><i></i><i></i><i></i></div>
+            <div className="shop-post post-a"></div>
+            <div className="shop-post post-b"></div>
+            <div className="base-roof"></div>
+            <div className="base-house">
+              <div className="shop-sign">补给站</div>
+              <div className="door"></div>
+              <div className="window"></div>
+              <div className="lifebuoy-ring"></div>
+            </div>
+            <div className="flagpole"><span></span></div>
+            <div className="fishing-rod"></div>
+            <div className="crate-stack"><b></b><b></b></div>
+            <div className="mini-fridge"></div>
+            <div className="tiny-table"></div>
+            <div className="plant-pot"></div>
+            <div className="shell-dot shell-a"></div>
+            <div className="shell-dot shell-b"></div>
+            <div className="bottle-prop"></div>
+            <div className="chalk-board">今日<br />补给</div>
+          </div>
+        </div>
+      </section>
+      <section className="title-status-bar">
+        <Status label="Day" value={snapshot.day} /><Status label="Boat Lv" value={`Lv.${snapshot.boatLevel}`} />
+        <Status label="金币" value={`${snapshot.coins} 🐚`} /><Status label="Hunger" value={snapshot.hunger} />
+        <Status label="Mood" value={snapshot.mood} /><Status label="天气" value={snapshot.weather} />
+        <Status label="阶段" value={info.phase} /><Status label="下次风暴" value={`${info.nextDisasterIn}天`} danger={info.nextDisasterIn <= 2 && snapshot.day >= 8} />
+      </section>
+      <div className="title-waves" aria-hidden="true">≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈</div>
     </main>
   );
 }
@@ -508,12 +590,119 @@ function formatSaveTime(savedAt: string) {
   return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+function furnitureIcon(name: string) {
+  if (name.includes("灯")) return "🏮";
+  if (name.includes("桌") || name.includes("火锅")) return "🪵";
+  if (name.includes("椅")) return "🪑";
+  if (name.includes("床") || name.includes("床垫")) return "🛏️";
+  if (name.includes("沙发")) return "🛋️";
+  if (name.includes("温泉")) return "♨️";
+  if (name.includes("马桶")) return "🚽";
+  if (name.includes("箱")) return "📦";
+  return "🪴";
+}
+
 function ActionButton({ badge, className = "", children, onClick }: { badge?: string; className?: string; children: ReactNode; onClick: () => void }) {
   return (
     <button className={`action-button ${className} ${badge ? "has-badge" : ""}`} onClick={onClick}>
       {badge && <span className="button-badge">{badge}</span>}
       {children}
     </button>
+  );
+}
+
+function TideShop({ state, onBuy }: { state: GameState; onBuy: (item: ShopItem) => void }) {
+  const daysLeft = 7 - ((state.day - 1) % 7);
+  return (
+    <div className="tide-shop">
+      <div className="section-heading">
+        <h3>🌊 潮汐商店</h3>
+        <span className="notice-pill">{daysLeft}天后刷新</span>
+      </div>
+      <div className="shop-stock-grid">
+        {state.shopStock.map((item) => (
+          <button className={`shop-card rarity-${item.rarity.toLowerCase()}`} key={item.id} disabled={item.quantity <= 0} onClick={() => onBuy(item)}>
+            <span>{itemEmoji[item.id]}</span>
+            <strong>{itemNames[item.id]}</strong>
+            <small>{categoryLabels[item.category]} · {item.rarity}</small>
+            <em>{item.price} 🐚 · x{item.quantity}</em>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InventoryPanel({ state, filter, onFilter }: { state: GameState; filter: ItemCategory | "all"; onFilter: (value: ItemCategory | "all") => void }) {
+  const items = (Object.keys(state.inventory) as ItemId[]).filter((id) => state.inventory[id] > 0 && (filter === "all" || itemMeta[id].category === filter));
+  return (
+    <>
+      <div className="filter-row">
+        {(Object.keys(categoryLabels) as (ItemCategory | "all")[]).map((category) => (
+          <button className={filter === category ? "active-filter" : ""} key={category} onClick={() => onFilter(category)}>{categoryLabels[category]}</button>
+        ))}
+      </div>
+      <div className="inventory-grid">
+        {items.length ? items.map((itemId) => (
+          <div className={`item has-item rarity-border-${itemMeta[itemId].rarity.toLowerCase()}`} key={itemId}>
+            {(itemId === "commonCrate" || itemId === "premiumCrate") && <span className="item-badge">可开</span>}
+            {itemMeta[itemId].category === "food" && <span className="item-badge">可吃</span>}
+            {itemMeta[itemId].category === "furniture" && <span className="item-badge">可布置</span>}
+            {itemMeta[itemId].category === "equipment" && <span className="item-badge">可装备</span>}
+            <span>{itemEmoji[itemId]}</span>
+            <strong>{itemNames[itemId]}</strong>
+            <em>x{state.inventory[itemId]}</em>
+          </div>
+        )) : <p className="hint">这个分类暂时没有物品。</p>}
+      </div>
+    </>
+  );
+}
+
+function TutorialModal({ onClose }: { onClose: (never: boolean) => void }) {
+  return (
+    <div className="modal-backdrop">
+      <section className="wide-modal tutorial-modal">
+        <h2>📘 新手漂流须知</h2>
+        <ol>
+          <li>钓鱼可以获得食物和卖钱。</li>
+          <li>打捞可以获得材料。</li>
+          <li>补给包会开出生活物资、工具、家具和装备。</li>
+          <li>饥饿过低会进入虚弱状态。</li>
+          <li>船体耐久过低会在风暴中很危险。</li>
+          <li>每 7 天潮汐商店会刷新。</li>
+          <li>新手安全期结束后，海上会变得更危险。</li>
+          <li>升级载具可以抵御更强天气，并解锁更多小屋空间。</li>
+        </ol>
+        <div className="modal-actions">
+          <button className="primary-action" onClick={() => onClose(false)}>我知道了</button>
+          <button onClick={() => onClose(true)}>不再显示</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function GameOverScreen({ state, completion, onRestart, onTitle }: { state: GameState; completion: number; onRestart: () => void; onTitle: () => void }) {
+  const legendary = state.logs.flatMap((log) => log.rewards ?? []).filter((reward) => reward.includes("Legendary"));
+  return (
+    <main className="start-screen">
+      <section className="start-card">
+        <p className="eyebrow">Ending</p>
+        <h1>漂流暂告一段落</h1>
+        <p className="intro">{state.gameOverReason}。你被路过的商船温柔救起。</p>
+        <div className="ending-grid">
+          <Status label="存活天数" value={state.day} />
+          <Status label="最高载具" value={`Lv.${state.boatLevel}`} />
+          <Status label="图鉴完成" value={`${completion}%`} />
+          <Status label="Legendary" value={legendary.length || "暂无"} />
+        </div>
+        <div className="modal-actions">
+          <button className="primary-action" onClick={onRestart}>重新开始</button>
+          <button onClick={onTitle}>返回标题页</button>
+        </div>
+      </section>
+    </main>
   );
 }
 

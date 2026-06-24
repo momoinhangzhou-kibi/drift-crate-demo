@@ -64,14 +64,19 @@ p {
 }
 
 .title-screen {
+  position: relative;
   min-height: 100vh;
+  overflow: hidden;
   display: grid;
-  place-items: center;
-  padding: 1.5rem;
+  grid-template-columns: minmax(340px, 0.8fr) minmax(620px, 1.35fr);
+  grid-template-rows: 1fr auto;
+  gap: 1.2rem;
+  align-items: center;
+  padding: clamp(1rem, 2vw, 2rem);
   background:
     radial-gradient(circle at 18% 16%, rgba(255, 255, 255, 0.95), transparent 16rem),
     radial-gradient(circle at 86% 18%, rgba(255, 245, 174, 0.72), transparent 12rem),
-    linear-gradient(180deg, #8ee4ff 0%, #dff8ff 52%, #62c3df 100%);
+    linear-gradient(180deg, #6dd5ff 0%, #bdeeff 52%, #0c7fb2 100%);
 }
 
 .start-card,
@@ -90,10 +95,12 @@ p {
   text-align: center;
 }
 
-.title-card {
-  width: min(760px, 100%);
-  padding: 1.4rem;
-  text-align: center;
+.title-menu-card {
+  position: relative;
+  z-index: 2;
+  width: min(500px, 100%);
+  justify-self: end;
+  padding: clamp(1rem, 2vw, 1.5rem);
   border: 2px solid rgba(255, 255, 255, 0.78);
   border-radius: 24px;
   background: rgba(255, 255, 255, 0.76);
@@ -101,84 +108,490 @@ p {
   backdrop-filter: blur(12px);
 }
 
-.title-card h1 {
-  margin-bottom: 0.4rem;
-  font-size: clamp(2.4rem, 8vw, 5rem);
-  color: #126d8b;
-}
-
-.title-subtitle {
-  margin-bottom: 0.35rem;
-  color: #24415f;
-  font-size: 1.05rem;
+.version-pill {
+  width: fit-content;
+  border-radius: 12px;
+  padding: 0.45rem 0.65rem;
+  color: #ffffff;
+  background: rgba(40, 137, 178, 0.68);
   font-weight: 900;
 }
 
-.title-tagline {
-  color: #557485;
-  font-weight: 800;
+.title-logo {
+  margin: 1.2rem 0;
+  color: #5b3a24;
+  text-shadow: 0 3px 0 rgba(255, 255, 255, 0.75);
 }
 
-.title-art {
-  position: relative;
-  min-height: 250px;
-  overflow: hidden;
-  margin-bottom: 1rem;
-  border-radius: 20px;
-  background: linear-gradient(180deg, #8bdfff 0 56%, #35b5d8 57% 100%);
+.title-logo h1 {
+  margin-bottom: 0.4rem;
+  font-size: clamp(3.1rem, 6vw, 5.2rem);
+  line-height: 0.92;
+  color: #fff7e9;
+  -webkit-text-stroke: 3px #6b4931;
 }
 
-.title-sun,
-.title-cloud,
-.title-crate,
-.title-raft,
-.title-waves {
+.title-logo p:last-child {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: #fff0c8;
+  color: #6b4931;
+  font-weight: 900;
+}
+
+.title-sky span {
   position: absolute;
+  z-index: 1;
 }
 
 .title-sun {
-  top: 1rem;
-  right: 1.3rem;
+  top: 2rem;
+  right: 7rem;
+  font-size: 4rem;
+  animation: bobSmall 5s ease-in-out infinite;
+}
+
+.cloud-a {
+  top: 4rem;
+  left: 24rem;
+  font-size: 5rem;
+  opacity: 0.85;
+}
+
+.cloud-b {
+  right: 2rem;
+  top: 8rem;
+  font-size: 4rem;
+  opacity: 0.8;
+}
+
+.gull {
+  color: #ffffff;
+  font-size: 4rem;
+  font-weight: 900;
+}
+
+.gull-a { top: 7rem; left: 47%; transform: rotate(-12deg); }
+.gull-b { top: 12rem; left: 37%; transform: rotate(9deg); }
+.far-boat { bottom: 14rem; left: 43%; opacity: 0.75; }
+
+.sea-base {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: clamp(560px, 72vh, 760px);
+  align-self: center;
+}
+
+.illustration-card {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 25% 20%, rgba(255,255,255,0.75), transparent 16rem),
+    linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.05) 48%, rgba(0,123,166,0.22));
+}
+
+.base-sunbeam {
+  position: absolute;
+  right: 4rem;
+  top: 3rem;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: rgba(255, 229, 128, 0.4);
+  box-shadow: 0 0 70px rgba(255, 229, 128, 0.55);
+}
+
+.seagull-shape {
+  position: absolute;
+  width: 58px;
+  height: 24px;
+  border-top: 5px solid #ffffff;
+  border-radius: 50%;
+  transform: rotate(-12deg);
+}
+
+.seagull-shape::after {
+  content: "";
+  position: absolute;
+  right: -34px;
+  top: -5px;
+  width: 58px;
+  height: 24px;
+  border-top: 5px solid #ffffff;
+  border-radius: 50%;
+  transform: rotate(22deg);
+}
+
+.gull-left { left: 8%; top: 18%; }
+.gull-right { right: 28%; top: 12%; transform: scale(0.72) rotate(6deg); }
+
+.base-platform {
+  position: absolute;
+  right: 3%;
+  bottom: 8%;
+  width: min(920px, 94%);
+  min-height: 390px;
+  border-radius: 36px 36px 24px 24px;
+  background: #bd7a3f;
+  border: 9px solid #6d4426;
+  box-shadow: 0 24px 0 #4e321f, 0 32px 36px rgba(0, 70, 95, 0.3);
+  animation: bobSmall 4s ease-in-out infinite;
+}
+
+.platform-plank {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18%;
+  background: linear-gradient(180deg, #d99a57, #9c6030);
+  border-right: 4px solid rgba(90, 52, 25, 0.45);
+}
+
+.p1 { left: 0; }
+.p2 { left: 18%; }
+.p3 { left: 36%; }
+.p4 { left: 54%; width: 46%; }
+
+.rope-front {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  bottom: 24px;
+  height: 12px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(90deg, #7d4d27 0 14px, #d7a66c 14px 28px);
+  z-index: 6;
+}
+
+.float {
+  position: absolute;
+  bottom: -46px;
+  width: 150px;
+  height: 62px;
+  border-radius: 999px;
+  background: #9b642f;
+  border: 6px solid #5d3b22;
+}
+
+.float-a { left: 3%; }
+.float-b { right: 6%; }
+
+.base-house {
+  position: absolute;
+  right: 20%;
+  bottom: 108px;
+  width: 300px;
+  height: 235px;
+  border: 6px solid #714728;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #c88445, #8e572e);
+  display: grid;
+  place-items: center;
+  color: #6b3f24;
+  font-weight: 900;
+  font-size: 2rem;
+  z-index: 4;
+}
+
+.base-house .shop-sign {
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  border: 4px solid #6d4426;
+  border-radius: 12px;
+  padding: 0.35rem 1rem;
+  background: #fff2c7;
+  color: #6b4931;
+}
+
+.door {
+  position: absolute;
+  left: 34px;
+  bottom: 0;
+  width: 70px;
+  height: 112px;
+  border-radius: 18px 18px 0 0;
+  background: #5f3923;
+}
+
+.window {
+  position: absolute;
+  right: 38px;
+  top: 72px;
+  width: 66px;
+  height: 58px;
+  border-radius: 12px;
+  background: #8bdfff;
+  border: 5px solid #5f3923;
+}
+
+.lifebuoy-ring {
+  position: absolute;
+  right: 92px;
+  bottom: 36px;
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  background: conic-gradient(#e45b4f 0 25%, #fff 25% 50%, #e45b4f 50% 75%, #fff 75%);
+  border: 8px solid #8a4d2c;
+}
+
+.lifebuoy-ring::after {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border-radius: 50%;
+  background: #c88445;
+}
+
+.base-roof {
+  position: absolute;
+  right: calc(20% - 26px);
+  bottom: 326px;
+  width: 352px;
+  height: 82px;
+  border-radius: 18px 18px 8px 8px;
+  background: repeating-linear-gradient(90deg, #fff0c8 0 34px, #d88949 34px 68px);
+  border: 5px solid #714728;
+  z-index: 2;
+}
+
+.string-lights {
+  position: absolute;
+  left: 15%;
+  right: 15%;
+  top: 44px;
+  display: flex;
+  justify-content: space-between;
+  z-index: 7;
+}
+
+.string-lights::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 10px;
+  height: 4px;
+  background: #5d3b22;
+  z-index: -1;
+}
+
+.string-lights i {
+  width: 18px;
+  height: 26px;
+  border-radius: 999px;
+  background: #ffe08a;
+  box-shadow: 0 0 18px #ffe08a;
+}
+
+.shop-post {
+  position: absolute;
+  top: 26px;
+  width: 18px;
+  height: 210px;
+  border-radius: 999px;
+  background: #704323;
+  z-index: 5;
+}
+
+.post-a { left: 14%; }
+.post-b { right: 15%; }
+
+.flagpole {
+  position: absolute;
+  right: 7%;
+  top: -46px;
+  width: 10px;
+  height: 160px;
+  background: #704323;
+}
+
+.flagpole span {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  width: 120px;
+  height: 72px;
+  border-radius: 12px 34px 34px 12px;
+  background: #2b80be;
+}
+
+.flagpole span::after {
+  content: "🐚";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 2rem;
+}
+
+.fishing-rod {
+  position: absolute;
+  left: 12%;
+  bottom: 170px;
+  width: 8px;
+  height: 210px;
+  border-radius: 999px;
+  background: #5d3b22;
+  transform: rotate(-25deg);
+}
+
+.fishing-rod::after {
+  content: "";
+  position: absolute;
+  right: -96px;
+  top: 0;
+  width: 110px;
+  height: 120px;
+  border-right: 2px solid rgba(255,255,255,0.8);
+  border-radius: 50%;
+}
+
+.crate-stack {
+  position: absolute;
+  left: 7%;
+  bottom: 74px;
+  display: grid;
+  grid-template-columns: repeat(2, 72px);
+  gap: 8px;
+  z-index: 5;
+}
+
+.crate-stack b {
+  height: 62px;
+  border: 5px solid #6d4426;
+  border-radius: 10px;
+  background: #d99a57;
+}
+
+.mini-fridge {
+  position: absolute;
+  right: 7%;
+  bottom: 88px;
+  width: 92px;
+  height: 160px;
+  border-radius: 18px;
+  border: 5px solid #d7e4e7;
+  background: #f7ffff;
+  z-index: 5;
+}
+
+.mini-fridge::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  top: 42px;
+  width: 8px;
+  height: 54px;
+  border-radius: 999px;
+  background: #b3c9cf;
+}
+
+.tiny-table {
+  position: absolute;
+  left: 31%;
+  bottom: 82px;
+  width: 150px;
+  height: 22px;
+  border-radius: 999px;
+  background: #704323;
+  z-index: 5;
+}
+
+.tiny-table::before,
+.tiny-table::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  width: 12px;
+  height: 70px;
+  background: #704323;
+}
+
+.tiny-table::before { left: 22px; }
+.tiny-table::after { right: 22px; }
+
+.plant-pot {
+  position: absolute;
+  right: 21%;
+  bottom: 84px;
+  width: 52px;
+  height: 44px;
+  border-radius: 10px 10px 18px 18px;
+  background: #b45638;
+  z-index: 5;
+}
+
+.plant-pot::before {
+  content: "🌱";
+  position: absolute;
+  left: -4px;
+  top: -42px;
   font-size: 3rem;
 }
 
-.title-cloud {
-  top: 1.6rem;
-  left: 1.4rem;
-  font-size: 2.8rem;
+.shell-dot,
+.bottle-prop {
+  position: absolute;
+  z-index: 6;
+  bottom: 54px;
 }
 
-.title-crate {
-  left: calc(50% + 70px);
-  bottom: 4.9rem;
-  z-index: 2;
-  font-size: 3.4rem;
-  animation: bobSmall 2.6s ease-in-out infinite;
-}
-
-.title-raft {
-  left: 50%;
-  bottom: 4.2rem;
-  z-index: 1;
-  font-size: 5.8rem;
-  transform: translateX(-50%);
-  animation: bobSmall 2.6s ease-in-out infinite;
-}
-
-.title-waves {
-  left: 50%;
-  bottom: 1.4rem;
-  color: #ffffff;
-  font-size: 2.2rem;
-  font-weight: 900;
-  transform: translateX(-50%);
-}
+.shell-dot { width: 24px; height: 18px; border-radius: 50%; background: #ffe3c4; }
+.shell-a { left: 53%; }
+.shell-b { left: 59%; transform: scale(0.8); }
+.bottle-prop { left: 24%; width: 60px; height: 22px; border-radius: 999px; background: #8bdfff; border: 4px solid #2c7993; transform: rotate(-18deg); }
+.chalk-board { position: absolute; right: 2%; bottom: 80px; z-index: 6; background: #4d3322; color: #fff6d8; border: 5px solid #8a5a32; border-radius: 8px; padding: 0.6rem; font-weight: 900; transform: rotate(-3deg); }
 
 .title-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.75rem;
+  gap: 0.65rem;
   margin: 1rem 0;
+}
+
+.title-actions button {
+  text-align: left;
+  font-size: 1.05rem;
+}
+
+.title-main-button {
+  color: #ffffff;
+  background: #ff8f73;
+  box-shadow: 0 8px 0 #d96855;
+  font-size: 1.35rem !important;
+}
+
+.title-status-bar {
+  z-index: 3;
+  grid-column: 1 / 3;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(90px, 1fr));
+  gap: 0.5rem;
+  width: min(980px, 100%);
+  justify-self: end;
+  border: 2px solid rgba(255,255,255,0.55);
+  border-radius: 18px;
+  padding: 0.65rem;
+  background: rgba(30, 132, 180, 0.72);
+}
+
+.title-waves {
+  position: absolute;
+  left: 50%;
+  bottom: 1.5rem;
+  z-index: 1;
+  color: #ffffff;
+  font-size: 3rem;
+  font-weight: 900;
+  transform: translateX(-50%);
+  animation: waveSlide 3s ease-in-out infinite;
 }
 
 .save-summary,
@@ -265,6 +678,35 @@ p {
   padding: 1rem;
 }
 
+.game-home {
+  width: min(1500px, 100%);
+  min-height: 100vh;
+}
+
+.game-home::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 18% 10%, rgba(255,255,255,0.9), transparent 20rem),
+    linear-gradient(180deg, #78d9ff 0%, #dff8ff 42%, #32a8d3 100%);
+}
+
+.weather-阴天::before,
+.weather-小雨::before {
+  filter: saturate(0.78) brightness(0.92);
+}
+
+.weather-暴雨::before,
+.weather-风暴::before {
+  filter: saturate(0.72) brightness(0.68);
+}
+
+.weather-大雾::before {
+  filter: saturate(0.55) brightness(1.08);
+}
+
 .topbar {
   display: grid;
   grid-template-columns: 250px 1fr;
@@ -272,6 +714,16 @@ p {
   align-items: center;
   padding: 1rem;
   margin-bottom: 1rem;
+}
+
+.game-topbar {
+  grid-template-columns: 210px 1fr;
+  border-radius: 18px;
+  padding: 0.75rem;
+}
+
+.hud-grid {
+  grid-template-columns: repeat(6, minmax(88px, 1fr));
 }
 
 .topbar h1 {
@@ -306,7 +758,8 @@ p {
   color: #a33232;
 }
 
-.layout {
+.layout,
+.game-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 430px;
   gap: 1rem;
@@ -329,12 +782,32 @@ p {
   align-items: stretch;
 }
 
+.stage-panel {
+  grid-template-columns: 1fr 320px;
+  padding: 0.8rem;
+  background: rgba(255,255,255,0.58);
+}
+
 .boat-scene {
   position: relative;
-  min-height: 330px;
+  min-height: clamp(420px, 52vh, 650px);
   overflow: hidden;
   border-radius: 18px;
   background: linear-gradient(180deg, #89dcff 0 55%, #39b9de 56% 100%);
+}
+
+.scene-weather-暴雨,
+.scene-weather-风暴 {
+  background: linear-gradient(180deg, #557d9c 0 55%, #145f83 56% 100%);
+}
+
+.scene-weather-大雾 {
+  background: linear-gradient(180deg, #c7ecf3 0 55%, #8fc8d5 56% 100%);
+}
+
+.stage-skybits span {
+  position: absolute;
+  z-index: 1;
 }
 
 .sun {
@@ -344,18 +817,33 @@ p {
   font-size: 3rem;
 }
 
+.stage-cloud {
+  font-size: 3.8rem;
+  opacity: 0.85;
+}
+
+.cloud-one { left: 8%; top: 10%; }
+.cloud-two { right: 16%; top: 16%; }
+.stage-gull { left: 42%; top: 18%; color: #fff; font-size: 4rem; font-weight: 900; transform: rotate(-10deg); }
+.stage-island { left: 6%; bottom: 35%; font-size: 2.8rem; opacity: 0.8; }
+.stage-ship { right: 9%; bottom: 38%; font-size: 2.4rem; opacity: 0.8; }
+.stage-bottle { left: 14%; bottom: 10%; font-size: 2rem; animation: bobSmall 3s ease-in-out infinite; }
+.stage-rain { inset: 0; display: grid; place-items: center; color: rgba(255,255,255,0.72); font-size: 2rem; letter-spacing: 0.5rem; animation: fadeIn 0.4s ease both; }
+.fog-layer { inset: 0; background: rgba(255,255,255,0.45); backdrop-filter: blur(2px); }
+
 .boat {
   position: absolute;
   left: 50%;
-  bottom: 2.3rem;
-  width: min(420px, 85%);
+  bottom: 2.4rem;
+  width: min(680px, 88%);
   transform: translateX(-50%);
   text-align: center;
   animation: bob 2.5s ease-in-out infinite;
+  z-index: 2;
 }
 
 .boat-roof {
-  font-size: 4rem;
+  font-size: clamp(3.2rem, 8vw, 6.5rem);
 }
 
 .boat-body {
@@ -364,8 +852,41 @@ p {
   color: #75451f;
   background: linear-gradient(180deg, #f7ca7f, #c7833f);
   border: 4px solid #8f5728;
-  font-size: 1.6rem;
+  font-size: clamp(1.25rem, 3vw, 2.2rem);
   font-weight: 900;
+}
+
+.home-level-1 .boat-body {
+  width: 58%;
+  margin: 0 auto;
+}
+
+.home-level-2 .boat-body {
+  width: 74%;
+  margin: 0 auto;
+  border-top: 8px dashed #73451f;
+}
+
+.home-level-3 .boat-body {
+  width: 86%;
+  margin: 0 auto;
+  padding-top: 1.8rem;
+}
+
+.home-level-4 .boat-body {
+  width: 96%;
+  margin: 0 auto;
+  background: linear-gradient(180deg, #fff0b7, #d98d43);
+  box-shadow: inset 0 0 0 6px rgba(255,255,255,0.28);
+}
+
+.furniture-strip {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.2rem;
+  margin-top: 0.25rem;
+  font-size: 1.8rem;
 }
 
 .waves {
@@ -392,6 +913,15 @@ p {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.8rem;
+}
+
+.action-dock {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  background: rgba(255,255,255,0.78);
+}
+
+.action-dock .action-button {
+  min-height: 74px;
 }
 
 .action-button {
@@ -523,7 +1053,8 @@ p {
 
 .shop-row,
 .fish-trade-grid,
-.fishdex-grid {
+.fishdex-grid,
+.shop-stock-grid {
   display: grid;
   gap: 0.7rem;
 }
@@ -531,6 +1062,85 @@ p {
 .shop-row {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   margin-top: 0.9rem;
+}
+
+.tide-shop {
+  margin-top: 0.9rem;
+}
+
+.shop-stock-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-height: 340px;
+  overflow: auto;
+}
+
+.shop-card {
+  display: grid;
+  gap: 0.25rem;
+  text-align: left;
+  box-shadow: none;
+  border: 2px solid #d7f3fb;
+}
+
+.shop-card span {
+  font-size: 1.6rem;
+}
+
+.shop-card em {
+  color: #1786a6;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+}
+
+.filter-row button {
+  padding: 0.45rem 0.65rem;
+  box-shadow: 0 5px 0 #9bd6e4;
+}
+
+.active-filter {
+  color: #ffffff;
+  background: #1786a6;
+}
+
+.rarity-border-rare {
+  border-color: #77bfff !important;
+}
+
+.rarity-border-epic {
+  border-color: #a985ff !important;
+  box-shadow: 0 0 16px rgba(124, 75, 214, 0.18);
+}
+
+.rarity-border-legendary {
+  border-color: #ffca42 !important;
+  box-shadow: 0 0 20px rgba(255, 189, 48, 0.3);
+}
+
+.boat-decor {
+  min-height: 1.3rem;
+  color: #ffffff;
+  font-weight: 900;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.18);
+}
+
+.tutorial-modal ol {
+  text-align: left;
+  line-height: 1.8;
+  font-weight: 800;
+}
+
+.ending-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 1rem 0;
 }
 
 .sell-all {
@@ -1263,9 +1873,20 @@ p {
   }
 }
 
+@keyframes waveSlide {
+  0%,
+  100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-48%) translateY(6px);
+  }
+}
+
 @media (max-width: 1100px) {
   .topbar,
   .layout,
+  .game-layout,
   .boat-panel,
   .bottom-row {
     grid-template-columns: 1fr;
@@ -1273,6 +1894,7 @@ p {
 
   .status-grid,
   .shop-row,
+  .shop-stock-grid,
   .fish-trade-grid,
   .fishdex-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1290,14 +1912,40 @@ p {
   .recent-panel {
     position: static;
   }
+
+  .title-screen {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .sea-base {
+    order: -1;
+    min-height: 520px;
+  }
+
+  .title-menu-card {
+    justify-self: center;
+  }
+
+  .title-status-bar {
+    grid-column: 1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-self: center;
+  }
+
+  .hud-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
   .talent-grid,
   .actions,
+  .action-dock,
   .title-actions,
   .status-grid,
   .shop-row,
+  .shop-stock-grid,
   .fish-trade-grid,
   .fishdex-grid,
   .inventory-grid,
@@ -1308,6 +1956,30 @@ p {
   .sell-price,
   .recent-actions {
     grid-template-columns: 1fr;
+  }
+
+  .hud-grid,
+  .title-status-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .boat-scene {
+    min-height: 430px;
+  }
+
+  .title-status-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .base-platform {
+    right: 0;
+    width: 940px;
+    transform: scale(0.68);
+    transform-origin: bottom center;
+  }
+
+  .sea-base {
+    min-height: 430px;
   }
 
   .amount-stepper {

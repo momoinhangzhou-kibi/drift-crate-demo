@@ -1,11 +1,43 @@
-import { BoatLevel, Card, Fish, FishCollectionEntry, FishPrices, Food, GameState, ItemId, Recipe, Talent, Weather } from "./types";
+import { BoatLevel, Card, Fish, FishCollectionEntry, FishPrices, Food, GameState, ItemId, ItemMeta, Recipe, ShopItem, Talent, Weather } from "./types";
 
 export const itemNames: Record<ItemId, string> = {
   wood: "木板",
   plastic: "塑料",
   rope: "绳子",
   scrap: "铁片",
+  screw: "螺丝",
+  tarp: "防水布",
+  tape: "胶带",
   water: "淡水",
+  biscuit: "饼干",
+  cannedFood: "罐头",
+  ramen: "泡面",
+  chocolate: "巧克力",
+  compressedBiscuit: "压缩饼干",
+  wrench: "扳手",
+  lighter: "打火机",
+  flashlight: "手电筒",
+  toolbox: "工具箱",
+  repairTape: "修理胶带",
+  toiletPaper: "卫生纸",
+  wetWipes: "湿巾",
+  sanitaryPad: "卫生巾",
+  towel: "毛巾",
+  soap: "肥皂",
+  medkit: "简易药包",
+  sturdyRod: "结实钓鱼竿",
+  advancedRodItem: "高级钓鱼竿",
+  fishingNet: "渔网",
+  waterproofBackpack: "防水背包",
+  solarPurifier: "太阳能净水器",
+  foldingChair: "折叠椅",
+  shellLamp: "贝壳灯",
+  waterproofMattress: "防水床垫",
+  simpleToilet: "简易马桶",
+  storageBox: "收纳箱",
+  mysteryBottle: "神秘漂流瓶",
+  luckyShell: "幸运贝壳",
+  merchantCoupon: "商船优惠券",
   hotpotBase: "火锅底料",
   veggiePack: "蔬菜包",
   meatSlices: "肉片",
@@ -27,7 +59,39 @@ export const itemEmoji: Record<ItemId, string> = {
   plastic: "🧴",
   rope: "🧶",
   scrap: "🔩",
+  screw: "⚙️",
+  tarp: "⛺",
+  tape: "🩹",
   water: "💧",
+  biscuit: "🍪",
+  cannedFood: "🥫",
+  ramen: "🍜",
+  chocolate: "🍫",
+  compressedBiscuit: "🥨",
+  wrench: "🔧",
+  lighter: "🔥",
+  flashlight: "🔦",
+  toolbox: "🧰",
+  repairTape: "🩹",
+  toiletPaper: "🧻",
+  wetWipes: "🧼",
+  sanitaryPad: "🌸",
+  towel: "🧺",
+  soap: "🫧",
+  medkit: "💊",
+  sturdyRod: "🎣",
+  advancedRodItem: "🎣",
+  fishingNet: "🕸️",
+  waterproofBackpack: "🎒",
+  solarPurifier: "☀️",
+  foldingChair: "🪑",
+  shellLamp: "🏮",
+  waterproofMattress: "🛏️",
+  simpleToilet: "🚽",
+  storageBox: "📦",
+  mysteryBottle: "🍾",
+  luckyShell: "🐚",
+  merchantCoupon: "🎫",
   hotpotBase: "🌶️",
   veggiePack: "🥬",
   meatSlices: "🥩",
@@ -44,7 +108,35 @@ export const itemEmoji: Record<ItemId, string> = {
   mysteryFish: "✨",
 };
 
-export const weatherList: Weather[] = ["晴天", "阴天", "暴雨", "大雾"];
+export const weatherList: Weather[] = ["晴天", "阴天", "小雨", "大雾"];
+export const disasterWeather: Weather[] = ["风暴", "高温", "寒潮", "暴雨"];
+
+export const itemMeta: Record<ItemId, ItemMeta> = Object.fromEntries(
+  (Object.keys(itemNames) as ItemId[]).map((id) => {
+    const food = ["water", "biscuit", "cannedFood", "ramen", "chocolate", "compressedBiscuit", "grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot"].includes(id);
+    const tools = ["wrench", "lighter", "flashlight", "toolbox", "repairTape"].includes(id);
+    const hygiene = ["toiletPaper", "wetWipes", "sanitaryPad", "towel", "soap", "medkit"].includes(id);
+    const furniture = ["foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox", "furnitureTicket"].includes(id);
+    const equipment = ["sturdyRod", "advancedRodItem", "fishingNet", "waterproofBackpack", "solarPurifier"].includes(id);
+    const special = ["commonCrate", "premiumCrate", "mysteryBottle", "luckyShell", "merchantCoupon"].includes(id);
+    const rarity = ["premiumCrate", "toolbox", "advancedRodItem", "solarPurifier", "shellLamp", "simpleToilet", "luckyShell"].includes(id)
+      ? "Epic"
+      : ["scrap", "screw", "tarp", "cannedFood", "ramen", "medkit", "sturdyRod", "fishingNet", "mysteryBottle"].includes(id)
+        ? "Rare"
+        : "Common";
+    return [id, { id, category: food ? "food" : tools ? "tools" : hygiene ? "hygiene" : furniture ? "furniture" : equipment ? "equipment" : special ? "special" : "materials", rarity }];
+  }),
+) as Record<ItemId, ItemMeta>;
+
+export const shopCatalog: ShopItem[] = [
+  ["wood", 5, 5], ["plastic", 6, 5], ["rope", 8, 4], ["scrap", 18, 3], ["screw", 14, 3], ["tarp", 22, 2], ["tape", 10, 3],
+  ["water", 10, 4], ["biscuit", 12, 3], ["cannedFood", 22, 2], ["ramen", 18, 2], ["chocolate", 16, 2], ["compressedBiscuit", 20, 2],
+  ["wrench", 35, 1], ["lighter", 26, 1], ["flashlight", 32, 1], ["toolbox", 80, 1], ["repairTape", 24, 2],
+  ["toiletPaper", 8, 2], ["wetWipes", 12, 2], ["sanitaryPad", 12, 2], ["towel", 16, 1], ["soap", 10, 2], ["medkit", 40, 1],
+  ["sturdyRod", 70, 1], ["advancedRodItem", 160, 1], ["fishingNet", 90, 1], ["waterproofBackpack", 100, 1], ["solarPurifier", 180, 1],
+  ["foldingChair", 45, 1], ["shellLamp", 85, 1], ["waterproofMattress", 80, 1], ["simpleToilet", 100, 1], ["storageBox", 70, 1],
+  ["commonCrate", 30, 3], ["premiumCrate", 100, 1], ["mysteryBottle", 45, 1], ["luckyShell", 120, 1], ["merchantCoupon", 60, 1],
+].map(([id, price, quantity]) => ({ id: id as ItemId, price: price as number, quantity: quantity as number, category: itemMeta[id as ItemId].category, rarity: itemMeta[id as ItemId].rarity }));
 
 export const talents: Talent[] = [
   { id: "fishing", name: "钓鱼高手", emoji: "🎣", description: "稀有鱼和神秘鱼概率上升。" },
@@ -90,7 +182,39 @@ export const initialInventory: Record<ItemId, number> = {
   plastic: 0,
   rope: 1,
   scrap: 0,
+  screw: 0,
+  tarp: 0,
+  tape: 0,
   water: 2,
+  biscuit: 0,
+  cannedFood: 0,
+  ramen: 0,
+  chocolate: 0,
+  compressedBiscuit: 0,
+  wrench: 0,
+  lighter: 0,
+  flashlight: 0,
+  toolbox: 0,
+  repairTape: 0,
+  toiletPaper: 0,
+  wetWipes: 0,
+  sanitaryPad: 0,
+  towel: 0,
+  soap: 0,
+  medkit: 0,
+  sturdyRod: 0,
+  advancedRodItem: 0,
+  fishingNet: 0,
+  waterproofBackpack: 0,
+  solarPurifier: 0,
+  foldingChair: 0,
+  shellLamp: 0,
+  waterproofMattress: 0,
+  simpleToilet: 0,
+  storageBox: 0,
+  mysteryBottle: 0,
+  luckyShell: 0,
+  merchantCoupon: 0,
   hotpotBase: 0,
   veggiePack: 0,
   meatSlices: 0,
@@ -108,6 +232,11 @@ export const initialInventory: Record<ItemId, number> = {
 };
 
 export const foodItems: Food[] = [
+  { id: "biscuit", name: "饼干", emoji: "🍪", hunger: 15, mood: 2, description: "脆脆的小饼干，适合应急。" },
+  { id: "cannedFood", name: "罐头", emoji: "🥫", hunger: 28, mood: 4, description: "扎实可靠的海上口粮。" },
+  { id: "ramen", name: "泡面", emoji: "🍜", hunger: 32, mood: 8, description: "热乎乎的泡面能拯救一天。" },
+  { id: "chocolate", name: "巧克力", emoji: "🍫", hunger: 12, mood: 12, description: "一点甜味让漂流没那么孤单。" },
+  { id: "compressedBiscuit", name: "压缩饼干", emoji: "🥨", hunger: 35, mood: 1, description: "非常顶饱，但谈不上快乐。" },
   { id: "grilledFish", name: "烤鱼", emoji: "🍖", hunger: 25, mood: 3, description: "最基础的漂流食物，简单但可靠。" },
   { id: "fishSoup", name: "鱼汤", emoji: "🍵", hunger: 30, mood: 8, description: "热乎乎的鱼汤让人恢复了一点精神。" },
   { id: "seafoodSkewer", name: "海鲜串", emoji: "🍢", hunger: 40, mood: 10, description: "把今天的收获串起来烤，意外地很香。" },
@@ -175,6 +304,7 @@ export function createInitialState(): GameState {
     fishCollection: createFishCollection(),
     fishPrices: createBaseFishPrices(),
     tradePrices: { commonFish: 3, rareFish: 10, mysteryFish: 45 },
+    shopStock: createShopStock(1),
     logs: [
       {
         id: crypto.randomUUID(),
@@ -186,4 +316,17 @@ export function createInitialState(): GameState {
       },
     ],
   };
+}
+
+export function createShopStock(day: number): ShopItem[] {
+  const week = Math.floor((day - 1) / 7);
+  const early = day <= 7;
+  let seed = week * 9301 + 49297;
+  const rand = () => {
+    seed = (seed * 233 + 71) % 9973;
+    return seed / 9973;
+  };
+  const pool = shopCatalog.filter((item) => early ? ["materials", "food", "hygiene", "tools", "special"].includes(item.category) && item.rarity !== "Epic" : true);
+  const picked = pool.filter((item) => rand() < (item.rarity === "Epic" ? 0.18 : item.rarity === "Rare" ? 0.35 : 0.55)).slice(0, early ? 10 : 14);
+  return (picked.length ? picked : pool.slice(0, early ? 10 : 14)).map((item) => ({ ...item, price: Math.max(1, Math.round(item.price * (0.9 + rand() * 0.25))) }));
 }

@@ -33,6 +33,30 @@ npm run dev
 http://localhost:5173/
 ```
 
+## 开发流程
+
+本地开发：
+
+```bash
+npm run dev
+```
+
+检查构建：
+
+```bash
+npm run build
+```
+
+发布到线上：
+
+```bash
+git add .
+git commit -m "update gameplay"
+git push
+```
+
+push 到 `main` 后，Vercel 会自动部署，线上链接会自动更新。
+
 ## 项目结构
 
 ```text

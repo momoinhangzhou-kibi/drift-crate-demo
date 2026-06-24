@@ -4,9 +4,12 @@ import {
   createBaseFishPrices,
   createFishCollection,
   createInitialState,
+  createShopStock,
+  disasterWeather,
   fishList,
   foodItems,
   furniturePool,
+  itemMeta,
   itemNames,
   recipes,
   upgradeRequirements,
@@ -274,17 +277,30 @@ export function hasFishToSell(state: GameState) {
   return Object.values(state.fishCollection).some((entry) => entry.count > 0);
 }
 
+export function getSurvivalInfo(state: GameState) {
+  const phase = state.day <= 3 ? "新手安全期" : state.day <= 7 ? "适应期" : "正式求生期";
+  const nextDisasterIn = state.day <= 7 ? 8 - state.day : 7 - ((state.day - 8) % 7);
+  const hpRate = state.boatHp / state.boatMaxHp;
+  const hungerState = state.hunger >= 60 ? "正常" : state.hunger >= 30 ? "饥饿" : state.hunger >= 10 ? "虚弱" : "濒危";
+  const moodState = state.mood >= 60 ? "正常" : state.mood >= 30 ? "低落" : state.mood >= 10 ? "崩溃边缘" : "精神崩溃风险";
+  const boatState = hpRate >= 0.6 ? "稳定" : hpRate >= 0.3 ? "受损" : state.boatHp > 0 ? "严重破损" : "沉没";
+  const danger = state.day <= 3 ? "低" : state.day <= 7 ? "中" : nextDisasterIn <= 2 ? "高" : "中";
+  return { phase, nextDisasterIn, danger, hungerState, moodState, boatState };
+}
+
 export function startGame(talent: TalentId): GameState {
   const state = createInitialState();
-  return addLog({ ...state, started: true, talent, tradePrices: createLegacyPrices(), fishPrices: createFishPrices() }, "event", "潮汐系统", "潮汐系统启动，今天的漂流生活开始了。", [], true);
+  return addLog({ ...state, started: true, talent, tradePrices: createLegacyPrices(), fishPrices: createFishPrices(), shopStock: createShopStock(1) }, "event", "潮汐系统", "潮汐系统启动，今天的漂流生活开始了。", [], true);
 }
 
 export function fish(state: GameState): GameState {
   if (state.hunger <= 0) return addLog(state, "warning", "体力不足", "你饿得头晕，先找点吃的再钓鱼吧。");
 
+  const netBonus = state.equipment.includes("fishingNet") && Math.random() < 0.35 ? 2 : 1;
+  const amount = state.hunger < 30 ? 1 : netBonus;
   const caught = pickFish(state);
-  const result = addFish({ ...state, hunger: clamp(state.hunger - 5) }, caught, 1);
-  let next = addLog(result.state, "fishing", "钓鱼", `你钓到了「${caught.name}」x1。`, [`${caught.emoji} ${caught.name} x1`], caught.rarity === "Epic" || caught.rarity === "Legendary");
+  const result = addFish({ ...state, hunger: clamp(state.hunger - 5) }, caught, amount);
+  let next = addLog(result.state, "fishing", "钓鱼", `你钓到了「${caught.name}」x${amount}。`, [`${caught.emoji} ${caught.name} x${amount}`], caught.rarity === "Epic" || caught.rarity === "Legendary");
 
   if (result.isNew) {
     next = addLog(next, "discovery", "新发现", `首次钓到「${caught.name}」！已加入钓鱼图鉴。`, [caught.rarity], true, true);
@@ -332,44 +348,47 @@ export function openCrate(state: GameState, crate: "commonCrate" | "premiumCrate
     return addLog(state, "crate", "补给包", "你翻了翻背包，但没有可以打开的补给包。");
   }
 
-  const rarity = rollCardRarity(state, crate === "premiumCrate");
-  const card = pick(cards.filter((item) => item.rarity === rarity));
+  const drops = randomInt(crate === "premiumCrate" ? 4 : 2, crate === "premiumCrate" ? 7 : 4);
+  const luckRoll = Math.random();
+  const luck = luckRoll > 0.96 ? "欧皇" : luckRoll > 0.82 ? "大好运" : luckRoll > 0.62 ? "好运" : luckRoll > 0.38 ? "小幸运" : "普通";
   let next = addItem(state, crate, -1);
   const rewards: string[] = [];
+  let bestRarity: Rarity = "Common";
 
-  if (card.itemId && card.amount) {
-    next = addItem(next, card.itemId, card.amount);
-    rewards.push(`${itemNames[card.itemId]} x${card.amount}`);
-  }
-  if (card.fishRarity && card.amount) {
-    const fishes: string[] = [];
-    for (let i = 0; i < card.amount; i += 1) {
-      const fishReward = pick(fishList.filter((fishItem) => fishItem.rarity === card.fishRarity));
-      const result = addFish(next, fishReward, 1);
-      next = result.state;
-      fishes.push(`${fishReward.emoji} ${fishReward.name}`);
-      if (result.isNew) {
-        next = addLog(next, "discovery", "新发现", `补给包里发现了「${fishReward.name}」！已加入钓鱼图鉴。`, [fishReward.rarity], true, true);
+  for (let i = 0; i < drops; i += 1) {
+    const rarity = rollCardRarity(state, crate === "premiumCrate");
+    const card = pick(cards.filter((item) => item.rarity === rarity));
+    bestRarity = ["Common", "Rare", "Epic", "Legendary"].indexOf(rarity) > ["Common", "Rare", "Epic", "Legendary"].indexOf(bestRarity) ? rarity : bestRarity;
+    if (card.itemId && card.amount) {
+      next = addItem(next, card.itemId, card.amount);
+      rewards.push(`${card.emoji} ${card.name} x${card.amount}`);
+    }
+    if (card.fishRarity && card.amount) {
+      for (let j = 0; j < card.amount; j += 1) {
+        const fishReward = pick(fishList.filter((fishItem) => fishItem.rarity === card.fishRarity));
+        const result = addFish(next, fishReward, 1);
+        next = result.state;
+        rewards.push(`${fishReward.emoji} ${fishReward.name}`);
+        if (result.isNew) next = addLog(next, "discovery", "新发现", `补给包里发现了「${fishReward.name}」！已加入钓鱼图鉴。`, [fishReward.rarity], true, true);
       }
     }
-    rewards.push(...fishes);
-  }
-  if (card.equipment && !next.equipment.includes(card.equipment)) {
-    next = { ...next, equipment: [...next.equipment, card.equipment] };
-    rewards.push(card.name);
-  }
-  if (card.furniture && !next.furniture.includes(card.furniture)) {
-    next = { ...next, furniture: [...next.furniture, card.furniture] };
-    rewards.push(card.furniture);
+    if (card.equipment && !next.equipment.includes(card.equipment)) {
+      next = { ...next, equipment: [...next.equipment, card.equipment] };
+      rewards.push(card.name);
+    }
+    if (card.furniture && !next.furniture.includes(card.furniture)) {
+      next = { ...next, furniture: [...next.furniture, card.furniture] };
+      rewards.push(card.furniture);
+    }
   }
 
   return addLog(
-    { ...next, lastCard: card, lastCrateType: crate, mood: clamp(next.mood + (rarity === "Legendary" ? 12 : rarity === "Epic" ? 8 : 3)) },
+    { ...next, lastCrateType: crate, lastCrateDrops: rewards, lastCrateLuck: luck, mood: clamp(next.mood + (bestRarity === "Legendary" ? 12 : bestRarity === "Epic" ? 8 : 3)) },
     "crate",
     crate === "premiumCrate" ? "高级补给包" : "普通补给包",
-    `打开${itemNames[crate]}，获得 ${card.rarity} 卡：「${card.name}」。`,
+    `打开${itemNames[crate]}，本次运气：${luck}，获得 ${rewards.length} 件补给。`,
     rewards,
-    rarity === "Epic" || rarity === "Legendary",
+    bestRarity === "Epic" || bestRarity === "Legendary",
   );
 }
 
@@ -440,6 +459,20 @@ export function buyItem(state: GameState, itemId: "commonCrate" | "premiumCrate"
 
   const next = addItem({ ...state, coins: state.coins - price }, itemId, 1);
   return addLog(next, "trade", "购买物资", `你买下了 ${itemNames[itemId]} x1。`, [itemNames[itemId]]);
+}
+
+export function buyShopItem(state: GameState, itemId: ItemId): GameState {
+  const shopItem = state.shopStock.find((item) => item.id === itemId);
+  if (!shopItem || shopItem.quantity <= 0) return addLog(state, "warning", "潮汐商店", "这件商品已经卖完了。");
+  const discount = state.equipment.includes("shopPermit") || state.inventory.merchantCoupon > 0 ? 0.9 : 1;
+  const price = Math.ceil(shopItem.price * discount);
+  if (state.coins < price) return addLog(state, "warning", "贝壳币不足", `还差 ${price - state.coins} 贝壳币，买不起${itemNames[itemId]}。`);
+  const shopStock = state.shopStock.map((item) => item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item);
+  let next = addItem({ ...state, coins: state.coins - price, shopStock }, itemId, 1);
+  if (["sturdyRod", "advancedRodItem", "fishingNet", "solarPurifier"].includes(itemId) && !next.equipment.includes(itemId)) {
+    next = { ...next, equipment: [...next.equipment, itemId] };
+  }
+  return addLog(next, "trade", "潮汐商店", `买下${itemNames[itemId]} x1，花费 ${price} 贝壳币。`, [`${itemNames[itemId]} x1`]);
 }
 
 export function cookRecipe(state: GameState, recipeId: string): GameState {
@@ -547,30 +580,54 @@ export function decorate(state: GameState): GameState {
 }
 
 export function endDay(state: GameState): GameState {
+  if (state.gameOverReason) return state;
+  const info = getSurvivalInfo(state);
+  const disasterDay = state.day >= 8 && info.nextDisasterIn === 1;
+  const nextWeather = disasterDay ? pick(disasterWeather) : pick(weatherList);
+  const hungerDrop = state.day <= 3 ? 8 : state.day <= 7 ? 12 : 15;
+  const moodExtra = state.hunger < 10 ? 12 : state.hunger < 30 ? 8 : state.hunger < 60 ? 3 : 0;
   let next: GameState = {
     ...state,
     day: state.day + 1,
-    weather: pick(weatherList),
-    hunger: clamp(state.hunger - 15),
-    mood: clamp(state.mood - (state.hunger <= 15 ? 12 : 5)),
+    weather: nextWeather,
+    hunger: clamp(state.hunger - hungerDrop),
+    mood: clamp(state.mood - (state.hunger <= 15 ? 12 : 5) - moodExtra + (state.boatLevel >= 3 ? 1 : 0)),
     fishPrices: createFishPrices(),
     tradePrices: createLegacyPrices(),
     newestFishId: undefined,
+    shopStock: state.day % 7 === 0 ? createShopStock(state.day + 1) : state.shopStock,
   };
 
-  if (next.equipment.includes("waterPurifier")) {
+  if (state.day % 7 === 0) next = addLog(next, "trade", "潮汐商店", "潮汐商店刷新了新的库存。");
+
+  if (next.equipment.includes("waterPurifier") || next.equipment.includes("solarPurifier")) {
     next = addItem(next, "water", 1);
     next = addLog(next, "event", "自动净水器", "自动净水器安静工作了一夜。", ["淡水 x1"]);
+  }
+  if (next.equipment.includes("solarPurifier")) next = addLog(next, "event", "太阳能净水器", "白天积攒的阳光换成了一瓶淡水。", ["淡水 x1"]);
+
+  if (nextWeather === "风暴") {
+    const damage = Math.round(20 * (state.boatLevel === 1 ? 1.5 : state.boatLevel === 2 ? 1.1 : state.boatLevel === 3 ? 0.75 : 0.45));
+    next = addLog({ ...next, boatHp: Math.max(0, next.boatHp - damage) }, "warning", "风暴", `风暴袭来，Boat HP -${damage}。`, [`Boat HP -${damage}`], true);
+  } else if (nextWeather === "高温") {
+    next = addLog({ ...next, hunger: clamp(next.hunger - (state.boatLevel >= 4 ? 6 : 15)) }, "warning", "高温", "太阳把海面晒得发白，Hunger 额外下降。", [], true);
+  } else if (nextWeather === "寒潮") {
+    next = addLog({ ...next, mood: clamp(next.mood - (state.boatLevel >= 3 ? 4 : 10)) }, "warning", "寒潮", "夜里突然变冷，Mood 下降。", [], true);
+  } else if (nextWeather === "暴雨") {
+    const damage = state.boatLevel >= 3 ? 5 : 10;
+    next = addLog({ ...next, boatHp: Math.max(0, next.boatHp - damage) }, "warning", "暴雨", `暴雨拍打木筏，Boat HP -${damage}。`, [`Boat HP -${damage}`]);
   }
 
   const event = Math.random();
   if (event < 0.18) next = addLog(next, "event", "漂流瓶", "你发现漂流瓶，里面竟然有 20 贝壳币。", ["+20 贝壳币"]);
-  else if (event < 0.36) next = addLog({ ...next, boatHp: Math.max(0, next.boatHp - 10) }, "event", "暴雨拍岸", "暴雨拍打木筏，Boat HP -10。", ["Boat HP -10"]);
   else if (event < 0.54) next = addLog(addItem(next, "commonCrate", 1), "event", "友好商船", "遇到友好商船，获得普通补给包。", ["普通补给包 x1"]);
   else if (event < 0.72) next = addLog(addItem(next, "rope", 1), "salvage", "清晨漂流物", "清晨有一卷绳子漂到木筏旁。", ["绳子 x1"]);
   else next = addLog({ ...next, mood: clamp(next.mood + 10) }, "event", "平静海面", "海面很平静，你的心情变好了。", ["Mood +10"]);
 
-  if (next.boatHp <= 0) next = addLog(next, "warning", "载具严重损坏", "载具严重损坏，需要尽快修理或升级。", [], true);
+  if (info.nextDisasterIn <= 2 && next.day >= 8) next = addLog(next, "warning", "潮汐预警", `⚠️ 潮汐系统预警：${info.nextDisasterIn} 天后可能出现大灾害。`, [], true);
+  if (next.boatHp <= 0) next = { ...addLog(next, "warning", "结局", "木筏沉没了，你被路过商船救起。", [], true), gameOverReason: "木筏沉没" };
+  else if (next.hunger <= 0 && Math.random() < 0.35) next = { ...addLog(next, "warning", "结局", "你饿得没有力气继续漂流，被救援船带离。", [], true), gameOverReason: "饥饿濒危" };
+  else if (next.mood <= 0 && Math.random() < 0.3) next = { ...addLog(next, "warning", "结局", "你决定结束这次漂流生活，回到岸上休息。", [], true), gameOverReason: "精神崩溃" };
   return addLog(next, "event", "新的一天", `第 ${next.day} 天来了，天气是${next.weather}，鱼价已刷新。`, [], false);
 }
 
@@ -579,6 +636,7 @@ function migrateState(raw: Partial<GameState>): GameState {
   const fishCollection = { ...createFishCollection(), ...(raw.fishCollection ?? {}) };
   const fishPrices = { ...createBaseFishPrices(), ...(raw.fishPrices ?? {}) };
   const inventory = { ...initial.inventory, ...(raw.inventory ?? {}) };
+  const shopStock = raw.shopStock?.length ? raw.shopStock : createShopStock(raw.day ?? 1);
   const logs = Array.isArray(raw.logs)
     ? raw.logs
         .filter((log) => typeof log === "object" && log)
@@ -595,7 +653,7 @@ function migrateState(raw: Partial<GameState>): GameState {
         )
     : initial.logs;
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, logs };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, logs };
 }
 
 function readSavedPayload(): { state: GameState; savedAt?: string } | undefined {
