@@ -1018,6 +1018,56 @@ p {
   gap: 0.8rem;
 }
 
+.music-settings-card {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 2px solid #bdebf5;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #ffffff, #e9faff);
+  box-shadow: inset 0 -5px 0 rgba(67, 178, 208, 0.12);
+}
+
+.music-settings-card strong {
+  color: #17647b;
+  font-size: 1.05rem;
+}
+
+.music-settings-card p {
+  margin: 0.25rem 0 0;
+  color: #557485;
+  font-weight: 800;
+}
+
+.music-settings-card select {
+  width: 100%;
+  border: 2px solid #bdebf5;
+  border-radius: 14px;
+  padding: 0.75rem 0.85rem;
+  color: #17647b;
+  background: #ffffff;
+  font-weight: 900;
+}
+
+.music-track-desc {
+  border-radius: 14px;
+  padding: 0.7rem;
+  background: #fff6d8;
+  color: #7a5a16;
+  font-weight: 800;
+}
+
+.music-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.music-error {
+  color: #d84d5b !important;
+}
+
 .action-button {
   position: relative;
 }

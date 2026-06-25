@@ -60,6 +60,9 @@ push 到 `main` 后，Vercel 会自动部署，线上链接会自动更新。
 ## 项目结构
 
 ```text
+public/
+  assets/
+    audio/      背景音乐素材
 src/
   App.tsx
   main.tsx
@@ -77,6 +80,10 @@ src/
 - `src/game/logic.ts`：钓鱼、打捞、开箱、交易、料理、升级、布置、结束一天、保存读取等逻辑
 - `src/App.tsx`：页面渲染和按钮交互
 - `src/styles.css`：可爱海蓝色 UI 样式
+
+## 素材来源
+
+- `public/assets/audio/ocean-cozy-1.mp3`、`ocean-cozy-2.mp3`、`ocean-cozy-3.mp3`：用户提供的背景音乐素材。若后续替换为外部免费可商用素材，请在这里补充具体来源与授权说明。
 
 ## 已知环境备注
 

@@ -72,6 +72,37 @@ type FeedbackData = {
   important?: boolean;
 };
 
+type MusicTrack = {
+  id: string;
+  name: string;
+  file: string;
+  description: string;
+};
+
+type MusicMode = "random" | string;
+
+const MUSIC_SETTINGS_KEY = "drift-crate-music-settings";
+const musicTracks: MusicTrack[] = [
+  { id: "ocean-cozy-1", name: "海风小屋", file: "/assets/audio/ocean-cozy-1.mp3", description: "温暖、治愈，适合整理海上小家。" },
+  { id: "ocean-cozy-2", name: "漂流午后", file: "/assets/audio/ocean-cozy-2.mp3", description: "轻松午后感，适合钓鱼和开箱。" },
+  { id: "ocean-cozy-3", name: "轻快海浪", file: "/assets/audio/ocean-cozy-3.mp3", description: "更活泼的海浪节奏，适合经营补给站。" },
+];
+
+function readMusicSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(MUSIC_SETTINGS_KEY) ?? "{}");
+    const trackExists = musicTracks.some((track) => track.id === parsed.trackId);
+    const mode: MusicMode = parsed.mode === "random" || musicTracks.some((track) => track.id === parsed.mode) ? parsed.mode : "random";
+    return {
+      on: Boolean(parsed.on),
+      mode,
+      trackId: trackExists ? parsed.trackId as string : musicTracks[0]?.id,
+    };
+  } catch {
+    return { on: false, mode: "random" as MusicMode, trackId: musicTracks[0]?.id };
+  }
+}
+
 const logIcon: Record<LogType, string> = {
   fishing: "🎣",
   salvage: "🪝",
@@ -96,13 +127,18 @@ function App() {
   const [showCat, setShowCat] = useState(false);
   const [activePanel, setActivePanel] = useState<ModulePanel | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
-  const [musicOn, setMusicOn] = useState(false);
+  const [musicOn, setMusicOn] = useState(() => readMusicSettings().on);
+  const [musicMode, setMusicMode] = useState<MusicMode>(() => readMusicSettings().mode);
+  const [currentTrackId, setCurrentTrackId] = useState<string | undefined>(() => readMusicSettings().trackId);
+  const [musicReady, setMusicReady] = useState(false);
+  const [musicError, setMusicError] = useState<string | undefined>();
   const [pendingTalent, setPendingTalent] = useState<TalentId | undefined>();
   const [inventoryFilter, setInventoryFilter] = useState<ItemCategory | "all">("all");
   const [sellFocusFishId, setSellFocusFishId] = useState<string | undefined>();
   const [recentExpanded, setRecentExpanded] = useState(false);
   const [feedback, setFeedback] = useState<FeedbackData | undefined>();
   const logPanelRef = useRef<HTMLElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedTalent = talents.find((talent) => talent.id === state.talent);
   const upgradeCost = useMemo(() => getUpgradeCost(state), [state]);
   const hotpotMissing = useMemo(() => getMissingRequirements(state, { hotpotBase: 1, veggiePack: 1, meatSlices: 1, water: 1 }), [state]);
@@ -115,32 +151,71 @@ function App() {
   const completion = Math.round((discoveredCount / fishList.length) * 100);
   const survival = getSurvivalInfo(state);
 
+  const pickMusicTrack = (excludeId?: string) => {
+    const options = musicTracks.filter((track) => track.id !== excludeId);
+    const pool = options.length ? options : musicTracks;
+    return pool[Math.floor(Math.random() * pool.length)] ?? musicTracks[0];
+  };
+
+  const playNextTrack = () => {
+    const next = musicMode === "random" ? pickMusicTrack(currentTrackId) : musicTracks.find((track) => track.id === musicMode) ?? pickMusicTrack(currentTrackId);
+    setCurrentTrackId(next.id);
+    setMusicReady(true);
+    setMusicError(undefined);
+  };
+
+  const toggleMusic = () => {
+    setMusicReady(true);
+    setMusicOn((value) => {
+      const nextOn = !value;
+      if (nextOn && !currentTrackId) setCurrentTrackId(pickMusicTrack().id);
+      return nextOn;
+    });
+  };
+
   useEffect(() => {
-    if (!musicOn) return;
-    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextClass) return;
-    const audio = new AudioContextClass();
-    const gain = audio.createGain();
-    gain.gain.value = 0.045;
-    gain.connect(audio.destination);
-    const notes = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 783.99, 880];
-    let index = 0;
-    const play = () => {
-      const osc = audio.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = notes[index % notes.length];
-      osc.connect(gain);
-      osc.start();
-      osc.stop(audio.currentTime + 0.18);
-      index += 1;
-    };
-    play();
-    const timer = window.setInterval(play, 420);
+    localStorage.setItem(MUSIC_SETTINGS_KEY, JSON.stringify({ on: musicOn, mode: musicMode, trackId: currentTrackId }));
+  }, [musicOn, musicMode, currentTrackId]);
+
+  useEffect(() => {
+    const markReady = () => setMusicReady(true);
+    window.addEventListener("pointerdown", markReady, { once: true });
+    window.addEventListener("keydown", markReady, { once: true });
     return () => {
-      window.clearInterval(timer);
-      audio.close();
+      window.removeEventListener("pointerdown", markReady);
+      window.removeEventListener("keydown", markReady);
     };
-  }, [musicOn]);
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!musicOn || !musicReady) {
+      audio.pause();
+      return;
+    }
+    const track = musicTracks.find((item) => item.id === (musicMode === "random" ? currentTrackId : musicMode)) ?? musicTracks[0];
+    if (!track) return;
+    if (currentTrackId !== track.id) setCurrentTrackId(track.id);
+    if (!audio.src.endsWith(track.file)) audio.src = track.file;
+    audio.volume = 0.42;
+    audio.loop = musicMode !== "random";
+    audio.play().then(() => setMusicError(undefined)).catch(() => setMusicError("音乐文件还没准备好，放入 public/assets/audio/ 后再试。"));
+  }, [musicOn, musicReady, musicMode, currentTrackId]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const handleEnded = () => {
+      if (musicMode === "random") playNextTrack();
+      else {
+        audio.currentTime = 0;
+        audio.play().catch(() => setMusicError("音乐文件还没准备好，放入 public/assets/audio/ 后再试。"));
+      }
+    };
+    audio.addEventListener("ended", handleEnded);
+    return () => audio.removeEventListener("ended", handleEnded);
+  }, [musicMode, currentTrackId]);
 
   const update = (next: GameState) => setState(next);
   const applyAction = (title: string, next: GameState) => {
@@ -234,60 +309,80 @@ function App() {
 
   if (view === "title") {
     return (
-      <TitleScreen
-        saveSummary={saveSummary}
-        hasActiveRun={state.started}
-        onNewGame={startNewGameFlow}
-        onContinue={continueGame}
-        onLoadMenu={() => setView("loadMenu")}
-        musicOn={musicOn}
-        onToggleMusic={() => setMusicOn((value) => !value)}
-      />
+      <>
+        <audio ref={audioRef} preload="none" />
+        <TitleScreen
+          saveSummary={saveSummary}
+          hasActiveRun={state.started}
+          onNewGame={startNewGameFlow}
+          onContinue={continueGame}
+          onLoadMenu={() => setView("loadMenu")}
+          musicOn={musicOn}
+          onToggleMusic={toggleMusic}
+        />
+      </>
     );
   }
 
   if (view === "loadMenu") {
     return (
-      <LoadScreen
-        saveSummary={saveSummary}
-        onBack={() => setView("title")}
-        onLoad={loadSavedGame}
-      />
+      <>
+        <audio ref={audioRef} preload="none" />
+        <LoadScreen
+          saveSummary={saveSummary}
+          onBack={() => setView("title")}
+          onLoad={loadSavedGame}
+        />
+      </>
     );
   }
 
   if (view === "catSelect") {
-    return <CatSelectScreen onBack={() => setView("talentSelect")} onChoose={chooseCat} />;
+    return (
+      <>
+        <audio ref={audioRef} preload="none" />
+        <CatSelectScreen onBack={() => setView("talentSelect")} onChoose={chooseCat} />
+      </>
+    );
   }
 
   if (view === "talentSelect" || !state.started) {
     return (
-      <main className="start-screen">
-        <section className="start-card">
-          <p className="eyebrow">Drift Crate</p>
-          <h1>漂流补给箱</h1>
-          <p className="intro">选择一个初始天赋，带着小木筏、旧鱼竿和潮汐系统，开始你的海上小家计划。</p>
-          <div className="talent-grid">
-            {talents.map((talent) => (
-              <button className="talent-card" key={talent.id} onClick={() => chooseTalent(talent.id as TalentId)}>
-                <span>{talent.emoji}</span>
-                <strong>{talent.name}</strong>
-                <small>{talent.description}</small>
-              </button>
-            ))}
-          </div>
-          <button className="compact-button menu-back" onClick={() => setView("title")}>返回主菜单</button>
-        </section>
-      </main>
+      <>
+        <audio ref={audioRef} preload="none" />
+        <main className="start-screen">
+          <section className="start-card">
+            <p className="eyebrow">Drift Crate</p>
+            <h1>漂流补给箱</h1>
+            <p className="intro">选择一个初始天赋，带着小木筏、旧鱼竿和潮汐系统，开始你的海上小家计划。</p>
+            <div className="talent-grid">
+              {talents.map((talent) => (
+                <button className="talent-card" key={talent.id} onClick={() => chooseTalent(talent.id as TalentId)}>
+                  <span>{talent.emoji}</span>
+                  <strong>{talent.name}</strong>
+                  <small>{talent.description}</small>
+                </button>
+              ))}
+            </div>
+            <button className="compact-button menu-back" onClick={() => setView("title")}>返回主菜单</button>
+          </section>
+        </main>
+      </>
     );
   }
 
   if (state.gameOverReason) {
-    return <GameOverScreen state={state} completion={completion} onRestart={() => { setState(resetGame()); setView("talentSelect"); }} onTitle={() => setView("title")} />;
+    return (
+      <>
+        <audio ref={audioRef} preload="none" />
+        <GameOverScreen state={state} completion={completion} onRestart={() => { setState(resetGame()); setView("talentSelect"); }} onTitle={() => setView("title")} />
+      </>
+    );
   }
 
   return (
     <main className={`app-shell game-home weather-${state.weather}`}>
+      <audio ref={audioRef} preload="none" />
       <header className="topbar game-topbar">
         <div>
           <p className="eyebrow">Drift Crate</p>
@@ -505,8 +600,18 @@ function App() {
           onCook={(recipeId) => applyAction("制作料理", cookRecipe(state, recipeId))}
           onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
           onDecorate={() => applyAction("布置家具", decorate(state))}
-          onToggleMusic={() => setMusicOn((value) => !value)}
+          onToggleMusic={toggleMusic}
           musicOn={musicOn}
+          musicMode={musicMode}
+          currentTrackId={currentTrackId}
+          musicError={musicError}
+          onMusicModeChange={(mode) => {
+            setMusicReady(true);
+            setMusicMode(mode);
+            setCurrentTrackId(mode === "random" ? pickMusicTrack(currentTrackId).id : mode);
+            setMusicError(undefined);
+          }}
+          onNextTrack={playNextTrack}
           onSave={saveCurrentGame}
           onReset={resetCurrentGame}
           onTitle={() => setView("title")}
@@ -770,7 +875,12 @@ function GameModulePanel({
   onFeedCat,
   onDecorate,
   musicOn,
+  musicMode,
+  currentTrackId,
+  musicError,
   onToggleMusic,
+  onMusicModeChange,
+  onNextTrack,
   onSave,
   onReset,
   onTitle,
@@ -787,7 +897,12 @@ function GameModulePanel({
   onFeedCat: (optionId: string) => void;
   onDecorate: () => void;
   musicOn: boolean;
+  musicMode: MusicMode;
+  currentTrackId?: string;
+  musicError?: string;
   onToggleMusic: () => void;
+  onMusicModeChange: (mode: MusicMode) => void;
+  onNextTrack: () => void;
   onSave: () => void;
   onReset: () => void;
   onTitle: () => void;
@@ -853,7 +968,25 @@ function GameModulePanel({
 
         {panel === "settings" && (
           <div className="settings-grid">
-            <button onClick={onToggleMusic}>音乐 {musicOn ? "开" : "关"}</button>
+            <div className="music-settings-card">
+              <div>
+                <strong>🎵 背景音乐</strong>
+                <p>当前模式：{musicMode === "random" ? "随机播放" : musicTracks.find((track) => track.id === musicMode)?.name ?? "随机播放"}</p>
+                <p>当前曲目：{musicTracks.find((track) => track.id === currentTrackId)?.name ?? "等待选择"}</p>
+                {musicError && <p className="music-error">{musicError}</p>}
+              </div>
+              <select value={musicMode} onChange={(event) => onMusicModeChange(event.target.value as MusicMode)}>
+                <option value="random">随机播放</option>
+                {musicTracks.map((track) => <option value={track.id} key={track.id}>{track.name}</option>)}
+              </select>
+              <div className="music-track-desc">
+                {(musicMode === "random" ? musicTracks.find((track) => track.id === currentTrackId) : musicTracks.find((track) => track.id === musicMode))?.description ?? "随机从海上小屋歌单里挑一首。"}
+              </div>
+              <div className="music-actions">
+                <button onClick={onToggleMusic}>音乐 {musicOn ? "关" : "开"}</button>
+                <button onClick={onNextTrack}>下一首</button>
+              </div>
+            </div>
             <button onClick={onSave}>保存游戏</button>
             <button onClick={onTitle}>返回标题页</button>
             <button className="danger-button" onClick={onReset}>重置游戏</button>
