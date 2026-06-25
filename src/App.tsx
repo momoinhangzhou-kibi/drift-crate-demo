@@ -103,6 +103,12 @@ function readMusicSettings() {
   }
 }
 
+function describeMusicPlayError(error: unknown) {
+  if (error instanceof DOMException) return `音乐播放失败：${error.message || error.name}`;
+  if (error instanceof Error) return `音乐播放失败：${error.message}`;
+  return "音乐播放失败，请再点一次音乐开关试试。";
+}
+
 const logIcon: Record<LogType, string> = {
   fishing: "🎣",
   salvage: "🪝",
@@ -166,6 +172,7 @@ function App() {
 
   const toggleMusic = () => {
     setMusicReady(true);
+    setMusicError(undefined);
     setMusicOn((value) => {
       const nextOn = !value;
       if (nextOn && !currentTrackId) setCurrentTrackId(pickMusicTrack().id);
@@ -192,15 +199,24 @@ function App() {
     if (!audio) return;
     if (!musicOn || !musicReady) {
       audio.pause();
+      if (!musicOn) setMusicError(undefined);
       return;
     }
     const track = musicTracks.find((item) => item.id === (musicMode === "random" ? currentTrackId : musicMode)) ?? musicTracks[0];
     if (!track) return;
     if (currentTrackId !== track.id) setCurrentTrackId(track.id);
-    if (!audio.src.endsWith(track.file)) audio.src = track.file;
+    if (audio.getAttribute("src") !== track.file) {
+      audio.src = track.file;
+      audio.load();
+    }
     audio.volume = 0.42;
     audio.loop = musicMode !== "random";
-    audio.play().then(() => setMusicError(undefined)).catch(() => setMusicError("音乐文件还没准备好，放入 public/assets/audio/ 后再试。"));
+    audio.play()
+      .then(() => setMusicError(undefined))
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setMusicError(describeMusicPlayError(error));
+      });
   }, [musicOn, musicReady, musicMode, currentTrackId]);
 
   useEffect(() => {
@@ -210,7 +226,10 @@ function App() {
       if (musicMode === "random") playNextTrack();
       else {
         audio.currentTime = 0;
-        audio.play().catch(() => setMusicError("音乐文件还没准备好，放入 public/assets/audio/ 后再试。"));
+        audio.play().catch((error) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setMusicError(describeMusicPlayError(error));
+        });
       }
     };
     audio.addEventListener("ended", handleEnded);
