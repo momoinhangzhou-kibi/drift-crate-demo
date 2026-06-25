@@ -916,12 +916,106 @@ p {
 }
 
 .action-dock {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   background: rgba(255,255,255,0.78);
 }
 
 .action-dock .action-button {
-  min-height: 74px;
+  min-height: 62px;
+  padding: 0.65rem 0.55rem;
+}
+
+.game-home .boat-scene {
+  min-height: clamp(330px, 44vh, 560px);
+}
+
+.game-home .stage-panel {
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+}
+
+.game-home .game-layout {
+  grid-template-columns: 1fr;
+}
+
+.game-home .trade-panel,
+.game-home .fishdex-panel,
+.game-home .game-side,
+.game-home .bottom-row {
+  display: none;
+}
+
+.module-menu {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 0.55rem;
+  background: rgba(255,255,255,0.78);
+}
+
+.module-menu button {
+  position: relative;
+  display: grid;
+  gap: 0.25rem;
+  min-height: 72px;
+  place-items: center;
+  padding: 0.55rem;
+  box-shadow: 0 6px 0 #9bd6e4;
+}
+
+.module-menu button span:not(.new-pill) {
+  font-size: 1.55rem;
+}
+
+.module-menu button strong {
+  font-size: 0.88rem;
+}
+
+.module-menu button.active {
+  color: #ffffff;
+  background: #2f9dcc;
+  box-shadow: 0 6px 0 #1f779e;
+}
+
+.module-menu .new-pill {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+}
+
+.game-panel-backdrop {
+  z-index: 24;
+  background: rgba(20, 65, 92, 0.42);
+  backdrop-filter: blur(5px);
+}
+
+.game-module-panel {
+  width: min(1120px, calc(100vw - 2rem));
+}
+
+.game-module-panel .modal-heading {
+  position: sticky;
+  top: -1.2rem;
+  z-index: 2;
+  margin: -1.2rem -1.2rem 1rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 2px solid #d7f3fb;
+  background: rgba(247, 253, 255, 0.96);
+}
+
+.module-stack {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.module-logs {
+  max-height: 62vh;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
 }
 
 .action-button {
@@ -2162,6 +2256,30 @@ p {
   .app-shell,
   .start-screen {
     padding: 0.7rem;
+  }
+}
+
+@media (max-width: 900px) {
+  .module-menu,
+  .action-dock {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .game-module-panel {
+    width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .module-menu,
+  .action-dock {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
   }
 }
 

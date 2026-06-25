@@ -52,6 +52,7 @@ const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "seafoodSkewer", "driftH
 const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
 
 type ViewState = "title" | "talentSelect" | "catSelect" | "playing" | "loadMenu";
+type ModulePanel = "inventory" | "shop" | "dex" | "recipes" | "journal" | "cat" | "home" | "settings";
 type FeedbackRarity = Rarity | FishRarity | "Uncommon";
 type FeedbackLine = {
   label: string;
@@ -93,6 +94,7 @@ function App() {
   const [showEating, setShowEating] = useState(false);
   const [showSelling, setShowSelling] = useState(false);
   const [showCat, setShowCat] = useState(false);
+  const [activePanel, setActivePanel] = useState<ModulePanel | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
   const [musicOn, setMusicOn] = useState(false);
   const [pendingTalent, setPendingTalent] = useState<TalentId | undefined>();
@@ -192,6 +194,7 @@ function App() {
     setShowCooking(false);
     setShowEating(false);
     setShowCat(false);
+    setActivePanel(undefined);
     setFeedback(undefined);
     update(resetGame());
     refreshSaveSummary();
@@ -356,18 +359,28 @@ function App() {
               🔨 升级载具
             </ActionButton>
             <ActionButton onClick={() => applyAction("修理载具", repairBoat(state))}>🧰 修理载具</ActionButton>
-            <ActionButton badge={readyToCook ? "可做" : undefined} onClick={() => setShowCooking(true)}>
+            <ActionButton badge={readyToCook ? "可做" : undefined} onClick={() => setActivePanel("recipes")}>
               🍲 制作料理
             </ActionButton>
             <ActionButton badge={readyToEat ? "可吃" : undefined} onClick={openEatingPanel}>
               🍽 进食
             </ActionButton>
-            <ActionButton onClick={() => setShowCat(true)}>🐈 猫猫</ActionButton>
+            <ActionButton onClick={() => setActivePanel("shop")}>🛒 商店</ActionButton>
+            <ActionButton onClick={() => setActivePanel("cat")}>🐈 猫猫</ActionButton>
             <ActionButton badge={readyToDecorate ? "可布置" : undefined} onClick={() => applyAction("布置家具", decorate(state))}>
               🪑 布置家具
             </ActionButton>
             <ActionButton className="night" onClick={() => applyAction("结束一天", endDay(state))}>🌙 结束一天</ActionButton>
           </section>
+
+          <RecentActivity
+            logs={state.logs}
+            expanded={recentExpanded}
+            onToggle={() => setRecentExpanded((value) => !value)}
+            onViewFull={() => setActivePanel("journal")}
+          />
+
+          <ModuleMenu activePanel={activePanel} onOpen={setActivePanel} hasNewFish={!!state.newestFishId} />
 
           <section className="panel trade-panel">
             <div className="section-heading">
@@ -479,6 +492,26 @@ function App() {
         </section>
       </section>
 
+      {activePanel && (
+        <GameModulePanel
+          panel={activePanel}
+          state={state}
+          completion={completion}
+          inventoryFilter={inventoryFilter}
+          onInventoryFilter={setInventoryFilter}
+          onClose={() => setActivePanel(undefined)}
+          onBuy={(item) => window.confirm(`购买 ${itemNames[item.id]}，花费 ${item.price} 贝壳币？`) && applyAction("购买", buyShopItem(state, item.id))}
+          onSellFish={openSellPanel}
+          onCook={(recipeId) => applyAction("制作料理", cookRecipe(state, recipeId))}
+          onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
+          onDecorate={() => applyAction("布置家具", decorate(state))}
+          onToggleMusic={() => setMusicOn((value) => !value)}
+          musicOn={musicOn}
+          onSave={saveCurrentGame}
+          onReset={resetCurrentGame}
+          onTitle={() => setView("title")}
+        />
+      )}
       {showCrate && <CrateModal state={state} onClose={() => setShowCrate(false)} />}
       {showCooking && (
         <CookingModal
@@ -693,6 +726,190 @@ function FeedbackSection({ title, tone, lines }: { title: string; tone: "gain" |
           {line.label}{line.amount ? ` ×${line.amount}` : ""}
         </span>
       ))}
+    </div>
+  );
+}
+
+const moduleItems: { id: ModulePanel; icon: string; label: string }[] = [
+  { id: "inventory", icon: "📦", label: "背包" },
+  { id: "shop", icon: "🛒", label: "商店" },
+  { id: "dex", icon: "🐟", label: "图鉴" },
+  { id: "recipes", icon: "🍳", label: "菜谱" },
+  { id: "journal", icon: "📖", label: "日记" },
+  { id: "cat", icon: "🐈", label: "猫猫" },
+  { id: "home", icon: "🪑", label: "家具" },
+  { id: "settings", icon: "⚙", label: "设置" },
+];
+
+function ModuleMenu({ activePanel, onOpen, hasNewFish }: { activePanel?: ModulePanel; onOpen: (panel: ModulePanel) => void; hasNewFish: boolean }) {
+  return (
+    <nav className="module-menu panel" aria-label="功能菜单">
+      {moduleItems.map((item) => (
+        <button className={activePanel === item.id ? "active" : ""} key={item.id} onClick={() => onOpen(item.id)}>
+          {item.id === "dex" && hasNewFish && <span className="new-pill">NEW</span>}
+          <span>{item.icon}</span>
+          <strong>{item.label}</strong>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function GameModulePanel({
+  panel,
+  state,
+  completion,
+  inventoryFilter,
+  onInventoryFilter,
+  onClose,
+  onBuy,
+  onSellFish,
+  onCook,
+  onFeedCat,
+  onDecorate,
+  musicOn,
+  onToggleMusic,
+  onSave,
+  onReset,
+  onTitle,
+}: {
+  panel: ModulePanel;
+  state: GameState;
+  completion: number;
+  inventoryFilter: ItemCategory | "all";
+  onInventoryFilter: (value: ItemCategory | "all") => void;
+  onClose: () => void;
+  onBuy: (item: ShopItem) => void;
+  onSellFish: (fishId?: string) => void;
+  onCook: (recipeId: string) => void;
+  onFeedCat: (optionId: string) => void;
+  onDecorate: () => void;
+  musicOn: boolean;
+  onToggleMusic: () => void;
+  onSave: () => void;
+  onReset: () => void;
+  onTitle: () => void;
+}) {
+  const title = moduleItems.find((item) => item.id === panel);
+
+  return (
+    <div className="modal-backdrop game-panel-backdrop" onClick={onClose}>
+      <section className={`wide-modal game-module-panel module-${panel}`} onClick={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Module</p>
+            <h2>{title?.icon} {title?.label}</h2>
+          </div>
+          <button className="compact-button" onClick={onClose}>关闭</button>
+        </div>
+
+        {panel === "inventory" && <InventoryPanel state={state} filter={inventoryFilter} onFilter={onInventoryFilter} />}
+
+        {panel === "shop" && (
+          <div className="module-stack">
+            <button className="sell-all" onClick={() => onSellFish()}>出售鱼获</button>
+            <div className="fish-trade-grid">
+              {fishList.map((fishItem) => (
+                <FishTradeCard key={fishItem.id} fish={fishItem} state={state} onSell={() => onSellFish(fishItem.id)} />
+              ))}
+            </div>
+            <TideShop state={state} onBuy={onBuy} />
+          </div>
+        )}
+
+        {panel === "dex" && (
+          <>
+            <p className="dex-summary">已发现 {fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length}/{fishList.length} · 完成度 {completion}%</p>
+            <div className="fishdex-grid">
+              {fishList.map((fishItem) => <FishDexCard key={fishItem.id} fish={fishItem} state={state} />)}
+            </div>
+          </>
+        )}
+
+        {panel === "recipes" && (
+          <div className="recipe-grid">
+            {recipes.map((recipe) => <RecipeCard key={recipe.id} recipe={recipe} state={state} onCook={() => onCook(recipe.id)} />)}
+          </div>
+        )}
+
+        {panel === "journal" && <JournalList logs={state.logs} />}
+
+        {panel === "cat" && <CatPanelContent state={state} onFeed={onFeedCat} />}
+
+        {panel === "home" && (
+          <div className="module-stack">
+            <button className="primary-action" disabled={state.inventory.furnitureTicket <= 0} onClick={onDecorate}>布置家具</button>
+            <div className="tag-list">
+              {state.furniture.length ? state.furniture.map((item) => <span key={item}>{furnitureIcon(item)} {item}</span>) : <p>还没有家具。</p>}
+            </div>
+            <h3>装备</h3>
+            <div className="tag-list">
+              {state.equipment.length ? state.equipment.map((item) => <span key={item}>{item}</span>) : <p>暂无装备。</p>}
+            </div>
+          </div>
+        )}
+
+        {panel === "settings" && (
+          <div className="settings-grid">
+            <button onClick={onToggleMusic}>音乐 {musicOn ? "开" : "关"}</button>
+            <button onClick={onSave}>保存游戏</button>
+            <button onClick={onTitle}>返回标题页</button>
+            <button className="danger-button" onClick={onReset}>重置游戏</button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function JournalList({ logs }: { logs: LogEntry[] }) {
+  return (
+    <div className="logs module-logs">
+      {logs.map((log) => (
+        <article className={`log-entry log-${log.type} ${log.important ? "important" : ""}`} key={log.id}>
+          <span className="log-icon">{logIcon[log.type]}</span>
+          <div>
+            <strong>【{log.title}】</strong>
+            {log.isNew && <span className="new-pill">NEW</span>}
+            <p>{log.message}</p>
+            {!!log.rewards?.length && (
+              <div className="reward-row">
+                {log.rewards.map((reward) => <span key={reward}>{reward}</span>)}
+              </div>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CatPanelContent({ state, onFeed }: { state: GameState; onFeed: (optionId: string) => void }) {
+  const options = getCatFeedOptions(state);
+  const cat = state.cat;
+  return (
+    <div className="module-stack">
+      <div className="cat-status-card">
+        <span className="cat-big-emoji">{cat.emoji}</span>
+        <div>
+          <strong>{cat.name} / {cat.breed}</strong>
+          <p>{cat.todayEvent ?? "猫猫正安静地待在木筏旁边。"}</p>
+        </div>
+      </div>
+      <div className="cat-stat-grid">
+        <Status label="亲密度" value={cat.intimacy} />
+        <Status label="饱腹度" value={cat.satiety} danger={cat.satiety < 20} />
+        <Status label="猫心情" value={cat.mood} />
+      </div>
+      <div className="cat-feed-list">
+        {options.length ? options.map((option) => (
+          <button key={option.id} onClick={() => onFeed(option.id)}>
+            <span>{option.emoji}</span>
+            <strong>{option.label}</strong>
+            <small>饱腹 +{option.catSatiety} / 亲密 +{option.catIntimacy} / Mood +{option.playerMood}</small>
+          </button>
+        )) : <p className="hint">背包里暂时没有适合喂猫的食物。</p>}
+      </div>
     </div>
   );
 }
