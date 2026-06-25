@@ -468,13 +468,13 @@ function App() {
         <div className="status-grid hud-grid">
           <Status label="Day" value={state.day} />
           <Status label="阶段" value={survival.phase} />
-          <Status label="灾害倒计时" value={`${survival.nextDisasterIn}天`} danger={survival.nextDisasterIn <= 2 && state.day >= 8} />
+          <Status label="灾害倒计时" value={survival.nextDisasterIn === 0 ? "今日" : `${survival.nextDisasterIn}天`} danger={survival.nextDisasterIn <= 2 && state.day >= 5} />
           <Status label="危险等级" value={survival.danger} danger={survival.danger === "高"} />
           <Status label="Weather" value={state.weather} />
           <Status label="Hunger" value={state.hunger} danger={state.hunger <= 15} />
           <Status label="Mood" value={state.mood} />
           <Status label="Coins" value={`${state.coins} 🐚`} />
-          <Status label="Boat HP" value={`${state.boatHp}/${state.boatMaxHp}`} danger={state.boatHp <= 15} />
+          <Status label="Boat HP" value={`${state.boatHp}/${state.boatMaxHp}`} danger={state.boatHp / state.boatMaxHp < 0.4} />
           <Status label="Boat Level" value={`Lv.${state.boatLevel}`} />
           <Status label="音乐" value={musicOn ? "开" : "关"} />
         </div>
@@ -513,7 +513,7 @@ function App() {
               <p>当前钓具：{state.equipment.includes("goldenRod") ? "黄金鱼竿" : state.equipment.includes("advancedRodItem") || state.equipment.includes("advancedRod") ? "高级钓鱼竿" : state.equipment.includes("sturdyRod") ? "结实钓鱼竿" : "旧钓鱼竿"}</p>
               <h3>下次升级</h3>
               {state.boatLevel >= 4 ? <p>已达到 Demo 最高等级。</p> : <RequirementList state={state} items={upgradeCost.items} coins={upgradeCost.coins} />}
-              {state.boatHp <= 0 && <strong className="warning">载具严重损坏，需要尽快修理。</strong>}
+              {state.boatHp / state.boatMaxHp < 0.4 && <strong className="warning">船体严重受损。下一次灾害前请尽快修理、升级或准备防水布。</strong>}
             </div>
           </section>
 
@@ -1184,7 +1184,7 @@ function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadM
         <Status label="Day" value={snapshot.day} /><Status label="Boat Lv" value={`Lv.${snapshot.boatLevel}`} />
         <Status label="金币" value={`${snapshot.coins} 🐚`} /><Status label="Hunger" value={snapshot.hunger} />
         <Status label="Mood" value={snapshot.mood} /><Status label="天气" value={snapshot.weather} />
-        <Status label="阶段" value={info.phase} /><Status label="下次风暴" value={`${info.nextDisasterIn}天`} danger={info.nextDisasterIn <= 2 && snapshot.day >= 8} />
+        <Status label="阶段" value={info.phase} /><Status label="下次风暴" value={info.nextDisasterIn === 0 ? "今日" : `${info.nextDisasterIn}天`} danger={info.nextDisasterIn <= 2 && snapshot.day >= 5} />
       </section>
     </main>
   );

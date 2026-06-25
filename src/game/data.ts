@@ -127,7 +127,7 @@ export const itemEmoji: Record<ItemId, string> = {
 };
 
 export const weatherList: Weather[] = ["晴天", "阴天", "小雨", "大雾"];
-export const disasterWeather: Weather[] = ["风暴", "高温", "寒潮", "暴雨"];
+export const disasterWeather: Weather[] = ["风暴", "高温", "寒潮", "暴雨", "巨浪"];
 
 export const itemMeta: Record<ItemId, ItemMeta> = Object.fromEntries(
   (Object.keys(itemNames) as ItemId[]).map((id) => {

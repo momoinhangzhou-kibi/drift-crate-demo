@@ -62,7 +62,7 @@ export type ItemId =
 
 export type Rarity = "Common" | "Rare" | "Epic" | "Legendary";
 export type FishRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary";
-export type Weather = "晴天" | "阴天" | "小雨" | "暴雨" | "大雾" | "风暴" | "高温" | "寒潮";
+export type Weather = "晴天" | "阴天" | "小雨" | "暴雨" | "大雾" | "风暴" | "高温" | "寒潮" | "巨浪";
 export type BoatLevel = 1 | 2 | 3 | 4;
 export type TalentId = "fishing" | "trading" | "lucky" | "crafting";
 export type ItemCategory = "materials" | "food" | "tools" | "hygiene" | "furniture" | "equipment" | "special";
