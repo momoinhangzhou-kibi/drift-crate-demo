@@ -614,12 +614,14 @@ export function eatFood(state: GameState, foodId: ItemId): GameState {
       ? `你喝下鱼汤，胃里暖暖的。Hunger +${food.hunger}，Mood +${food.mood}。`
       : `你吃掉了${food.name}。Hunger +${food.hunger}，Mood +${food.mood}。`;
 
+  const hotpotTableBonus = state.furniture.includes("海上火锅桌") && food.mood > 0 ? 1 : 0;
+
   return addLog(
-    { ...next, hunger: clamp(next.hunger + food.hunger), mood: clamp(next.mood + food.mood) },
+    { ...next, hunger: clamp(next.hunger + food.hunger), mood: clamp(next.mood + food.mood + hotpotTableBonus) },
     "cooking",
     "进食",
-    message,
-    [`Hunger +${food.hunger}`, `Mood +${food.mood}`],
+    hotpotTableBonus ? `${message} 海上火锅桌让这顿饭更有仪式感，Mood 额外 +1。` : message,
+    [`Hunger +${food.hunger}`, `Mood +${food.mood + hotpotTableBonus}`],
   );
 }
 
@@ -715,6 +717,11 @@ export function placeInventoryFurniture(state: GameState, itemId: ItemId): GameS
   return addLog({ ...next, furniture: [...next.furniture, furniture], mood: clamp(next.mood + 6) }, "furniture", "布置家具", `你布置了「${furniture}」，海上小家更舒服了。`, [furniture, "Mood +6"]);
 }
 
+export function removeFurniture(state: GameState, furniture: string): GameState {
+  if (!state.furniture.includes(furniture)) return addLog(state, "warning", "家具", "这件家具还没有布置。");
+  return addLog({ ...state, furniture: state.furniture.filter((item) => item !== furniture) }, "furniture", "收起家具", `你收起了「${furniture}」。`, [furniture]);
+}
+
 export function decorate(state: GameState): GameState {
   if (state.inventory.furnitureTicket <= 0) return addLog(state, "warning", "没有家具券", "需要 1 张家具券才能布置新家具。");
 
@@ -782,12 +789,16 @@ export function endDay(state: GameState): GameState {
   const nextWeather = disasterDay ? pick(disasterWeather) : pick(weatherList);
   const hungerDrop = state.day <= 3 ? 8 : state.day <= 7 ? 12 : 15;
   const moodExtra = state.hunger < 10 ? 12 : state.hunger < 30 ? 8 : state.hunger < 60 ? 3 : 0;
+  const dailyFurnitureMood =
+    (state.furniture.includes("迷你温泉") ? 2 : 0) +
+    (state.furniture.includes("豪华沙发") ? 2 : 0) +
+    (state.furniture.includes("防水床垫") ? 1 : 0);
   let next: GameState = {
     ...state,
     day: state.day + 1,
     weather: nextWeather,
     hunger: clamp(state.hunger - hungerDrop),
-    mood: clamp(state.mood - (state.hunger <= 15 ? 12 : 5) - moodExtra + (state.boatLevel >= 3 ? 1 : 0)),
+    mood: clamp(state.mood - (state.hunger <= 15 ? 12 : 5) - moodExtra + (state.boatLevel >= 3 ? 1 : 0) + dailyFurnitureMood),
     fishPrices: createFishPrices(),
     tradePrices: createLegacyPrices(),
     newestFishId: undefined,
@@ -795,6 +806,7 @@ export function endDay(state: GameState): GameState {
   };
 
   if (state.day % 7 === 0) next = addLog(next, "trade", "潮汐商店", "潮汐商店刷新了新的库存。");
+  if (dailyFurnitureMood > 0) next = addLog(next, "furniture", "家具效果", `舒适家具让海上小家更安心，Mood +${dailyFurnitureMood}。`, [`Mood +${dailyFurnitureMood}`]);
 
   if (next.equipment.includes("waterPurifier") || next.equipment.includes("solarPurifier")) {
     next = addItem(next, "water", 1);
@@ -813,10 +825,13 @@ export function endDay(state: GameState): GameState {
   } else if (nextWeather === "高温") {
     next = addLog({ ...next, hunger: clamp(next.hunger - (state.boatLevel >= 4 ? 6 : 15)) }, "warning", "高温", "太阳把海面晒得发白，Hunger 额外下降。", [], true);
   } else if (nextWeather === "寒潮") {
-    next = addLog({ ...next, mood: clamp(next.mood - (state.boatLevel >= 3 ? 4 : 10)) }, "warning", "寒潮", "夜里突然变冷，Mood 下降。", [], true);
+    const protection = (state.furniture.includes("迷你温泉") ? 3 : 0) + (state.furniture.includes("海上火锅桌") ? 2 : 0) + (state.furniture.includes("防水床垫") ? 2 : 0);
+    const loss = Math.max(0, (state.boatLevel >= 3 ? 4 : 10) - protection);
+    next = addLog({ ...next, mood: clamp(next.mood - loss) }, "warning", "寒潮", `夜里突然变冷，Mood -${loss}。${protection ? "家具提供了保暖保护。" : ""}`, loss ? [`Mood -${loss}`] : ["家具保护"], true);
   } else if (nextWeather === "暴雨") {
     const damage = state.boatLevel >= 3 ? 5 : 10;
-    next = addLog({ ...next, boatHp: Math.max(0, next.boatHp - damage) }, "warning", "暴雨", `暴雨拍打木筏，Boat HP -${damage}。`, [`Boat HP -${damage}`]);
+    const moodLoss = state.furniture.includes("防水床垫") || state.furniture.includes("贝壳灯") ? 0 : 2;
+    next = addLog({ ...next, boatHp: Math.max(0, next.boatHp - damage), mood: clamp(next.mood - moodLoss) }, "warning", "暴雨", `暴雨拍打木筏，Boat HP -${damage}。${moodLoss ? "潮湿的夜晚让心情有点下降。" : "家具让小屋保持了安心感。"}`, moodLoss ? [`Boat HP -${damage}`, `Mood -${moodLoss}`] : [`Boat HP -${damage}`, "家具保护"]);
   }
 
   next = applyCatDay(next, disasterWeather.includes(nextWeather));

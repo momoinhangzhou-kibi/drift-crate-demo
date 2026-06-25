@@ -25,6 +25,7 @@ import {
   openCrate,
   placeInventoryFurniture,
   repairBoat,
+  removeFurniture,
   resetGame,
   salvage,
   saveGameWithLog,
@@ -155,6 +156,7 @@ function App() {
   const [activePanel, setActivePanel] = useState<ModulePanel | undefined>();
   const [titlePanel, setTitlePanel] = useState<TitlePanel | undefined>();
   const [selectedItem, setSelectedItem] = useState<ItemId | undefined>();
+  const [selectedFurniture, setSelectedFurniture] = useState<string | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
   const [musicOn, setMusicOn] = useState(() => readMusicSettings().on);
   const [musicMode, setMusicMode] = useState<MusicMode>(() => readMusicSettings().mode);
@@ -618,7 +620,7 @@ function App() {
           <section className="panel home-panel">
             <h2>🏡 我的漂流小屋</h2>
             <div className="tag-list">
-              {state.furniture.length ? state.furniture.map((item) => <span key={item}>{item}</span>) : <p>还没有家具，等一张家具券来改变生活。</p>}
+              {state.furniture.length ? state.furniture.map((item) => <button className="tag-button" key={item} onClick={() => setSelectedFurniture(item)}>{furnitureIcon(item)} {item}</button>) : <p>还没有家具，等一张家具券来改变生活。</p>}
             </div>
             <h3>装备</h3>
             <div className="tag-list">
@@ -675,6 +677,7 @@ function App() {
           onCook={(recipeId) => applyAction("制作料理", cookRecipe(state, recipeId))}
           onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
           onDecorate={() => applyAction("布置家具", decorate(state))}
+          onFurnitureSelect={setSelectedFurniture}
           onToggleMusic={toggleMusic}
           musicOn={musicOn}
           musicMode={musicMode}
@@ -745,6 +748,17 @@ function App() {
             setShowCrate(true);
           }}
           onDecorate={(itemId) => applyAction("布置家具", itemId === "furnitureTicket" ? decorate(state) : placeInventoryFurniture(state, itemId))}
+        />
+      )}
+      {selectedFurniture && (
+        <FurnitureDetailModal
+          state={state}
+          furniture={selectedFurniture}
+          onClose={() => setSelectedFurniture(undefined)}
+          onRemove={(furniture) => {
+            applyAction("收起家具", removeFurniture(state, furniture));
+            setSelectedFurniture(undefined);
+          }}
         />
       )}
       {showTutorial && <TutorialModal onClose={(never) => { setShowTutorial(false); if (never) update({ ...state, tutorialSeen: true }); }} />}
@@ -964,6 +978,7 @@ function GameModulePanel({
   onCook,
   onFeedCat,
   onDecorate,
+  onFurnitureSelect,
   musicOn,
   musicMode,
   currentTrackId,
@@ -987,6 +1002,7 @@ function GameModulePanel({
   onCook: (recipeId: string) => void;
   onFeedCat: (optionId: string) => void;
   onDecorate: () => void;
+  onFurnitureSelect: (furniture: string) => void;
   musicOn: boolean;
   musicMode: MusicMode;
   currentTrackId?: string;
@@ -1048,7 +1064,7 @@ function GameModulePanel({
           <div className="module-stack">
             <button className="primary-action" disabled={state.inventory.furnitureTicket <= 0} onClick={onDecorate}>布置家具</button>
             <div className="tag-list">
-              {state.furniture.length ? state.furniture.map((item) => <span key={item}>{furnitureIcon(item)} {item}</span>) : <p>还没有家具。</p>}
+              {state.furniture.length ? state.furniture.map((item) => <button className="tag-button" key={item} onClick={() => onFurnitureSelect(item)}>{furnitureIcon(item)} {item}</button>) : <p>还没有家具。</p>}
             </div>
             <h3>装备</h3>
             <div className="tag-list">
@@ -1531,6 +1547,55 @@ function ItemDetailModal({
           {furnitureIds.includes(itemId) && <button onClick={() => runAndClose(() => onDecorate(itemId))}>布置</button>}
           {category === "equipment" && <button disabled>{equipmentActive ? "已装备" : "查看效果"}</button>}
           {category === "materials" && <button disabled>材料会在制作/升级时使用</button>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+const furnitureDetails: Record<string, { emoji: string; description: string; effect: string }> = {
+  "迷你温泉": { emoji: "♨️", description: "小小一池热水，是海上小家最奢侈的角落。", effect: "每日 Mood +2，寒潮时 Mood 损失减少。" },
+  "海上火锅桌": { emoji: "🍲", description: "稳稳固定在平台上的小火锅桌，适合庆祝钓到好鱼。", effect: "进食/料理 Mood 效果 +1，寒潮时额外保护。" },
+  "豪华沙发": { emoji: "🛋️", description: "软乎乎的休息角，让木筏有了真正的客厅。", effect: "每日 Mood +2。" },
+  "贝壳灯": { emoji: "🏮", description: "暖黄色小灯，坏天气里也能照亮小屋。", effect: "暴雨时减少 Mood 损失。" },
+  "防水床垫": { emoji: "🛏️", description: "不会被浪花轻易打湿的床垫，睡起来踏实很多。", effect: "每日 Mood +1，暴雨/寒潮时减少 Mood 损失。" },
+  "海上便利店许可证": { emoji: "🏪", description: "挂在小屋里的经营许可，感觉真的要开店了。", effect: "商店价格小幅优惠，也代表补给站经营感提升。" },
+  "小木桌": { emoji: "🪵", description: "一张结实的小桌子，可以摆饭、摆贝壳、摆今天的收获。", effect: "提升生活感，后续可扩展更多料理/摆放效果。" },
+  "折叠椅": { emoji: "🪑", description: "收放方便的椅子，适合坐着看海。", effect: "提升生活感，布置时 Mood 提升。" },
+  "简易马桶": { emoji: "🚽", description: "朴素但重要的生活设施。", effect: "提升小屋生活质量。" },
+  "收纳箱": { emoji: "📦", description: "把补给收好，心里也会安稳一点。", effect: "提升仓储感，后续可扩展背包容量效果。" },
+};
+
+function getFurnitureDetail(furniture: string) {
+  return furnitureDetails[furniture] ?? { emoji: furnitureIcon(furniture), description: `${furniture}让海上小家更有生活感。`, effect: "已布置后持续生效。" };
+}
+
+function FurnitureDetailModal({ state, furniture, onClose, onRemove }: { state: GameState; furniture: string; onClose: () => void; onRemove: (furniture: string) => void }) {
+  const detail = getFurnitureDetail(furniture);
+  const placed = state.furniture.includes(furniture);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="wide-modal item-detail-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">家具</p>
+            <h2>{detail.emoji} {furniture}</h2>
+          </div>
+          <button className="compact-button" onClick={onClose}>关闭</button>
+        </div>
+        <div className="item-detail-body">
+          <span className="item-detail-emoji">{detail.emoji}</span>
+          <div>
+            <p><strong>分类：</strong>家具</p>
+            <p><strong>状态：</strong>{placed ? "已布置 / 生效中" : "未布置"}</p>
+            <p><strong>描述：</strong>{detail.description}</p>
+            <p><strong>布置效果：</strong>{detail.effect}</p>
+          </div>
+        </div>
+        <div className="item-detail-actions">
+          <button disabled={placed}>{placed ? "已布置" : "布置"}</button>
+          <button className="danger-button" disabled={!placed} onClick={() => onRemove(furniture)}>收起</button>
+          <button onClick={onClose}>关闭</button>
         </div>
       </section>
     </div>

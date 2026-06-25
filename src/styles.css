@@ -1741,6 +1741,15 @@ p {
   font-weight: 800;
 }
 
+.tag-button {
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  background: #e8f9ff;
+  color: #17647b;
+  font-weight: 900;
+  box-shadow: 0 4px 0 #b6e6f1;
+}
+
 .bottom-row {
   display: grid;
   grid-template-columns: 1fr 220px;
