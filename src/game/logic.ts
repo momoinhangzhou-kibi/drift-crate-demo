@@ -149,13 +149,20 @@ function getFishCandidates(state: GameState, recipe: Recipe) {
   return candidates;
 }
 
+function getEffectiveRecipeCost(state: GameState, recipe: Recipe) {
+  const cost = { ...recipe.fixedCost };
+  const grillHelps = state.equipment.includes("grill") && ["grilled-fish", "grilled-fish-skewer", "seafood-skewer"].includes(recipe.id);
+  if (grillHelps && cost.wood) cost.wood = Math.max(0, cost.wood - 1);
+  return cost;
+}
+
 function getRecipeById(recipeId: string) {
   return recipes.find((recipe) => recipe.id === recipeId);
 }
 
 export function getRecipeStatus(state: GameState, recipe: Recipe) {
   const unlocked = !recipe.unlockDay || state.day >= recipe.unlockDay;
-  const missing = formatMissingItems(state, recipe.fixedCost);
+  const missing = formatMissingItems(state, getEffectiveRecipeCost(state, recipe));
   const fishCandidates = getFishCandidates(state, recipe);
   const needFish = recipe.fishCount ?? 0;
 
@@ -174,6 +181,7 @@ export function getRecipeStatus(state: GameState, recipe: Recipe) {
     selectedFish: fishCandidates.slice(0, needFish),
     unlocked,
     unlockHint: recipe.unlockHint,
+    effectiveCost: getEffectiveRecipeCost(state, recipe),
   };
 }
 
@@ -224,7 +232,12 @@ function weightedRarity(state: GameState): FishRarity {
     weights.Epic += 1.5;
     weights.Legendary += 0.5;
   }
-  if (state.equipment.includes("advancedRod")) {
+  if (state.equipment.includes("sturdyRod")) {
+    weights.Common -= 4;
+    weights.Uncommon += 3;
+    weights.Rare += 1;
+  }
+  if (state.equipment.includes("advancedRod") || state.equipment.includes("advancedRodItem")) {
     weights.Common -= 7;
     weights.Uncommon -= 2;
     weights.Rare += 5;
@@ -397,8 +410,15 @@ export function salvage(state: GameState): GameState {
     ["meatSlices", 1],
   ] as [ItemId, number][]);
 
-  const next = addItem({ ...state, hunger: clamp(state.hunger - 4), mood: clamp(state.mood + 1) }, loot[0], loot[1]);
-  return addLog(next, "salvage", "打捞", `你从漂流木箱里找到了${itemNames[loot[0]]} x${loot[1]}。`, [`${itemNames[loot[0]]} x${loot[1]}`]);
+  let next = addItem({ ...state, hunger: clamp(state.hunger - 4), mood: clamp(state.mood + 1) }, loot[0], loot[1]);
+  const rewards = [`${itemNames[loot[0]]} x${loot[1]}`];
+  if (state.equipment.includes("waterproofBackpack") && Math.random() < 0.28) {
+    const extra = pick(["wood", "plastic", "rope", "tape"] as ItemId[]);
+    next = addItem(next, extra, 1);
+    rewards.push(`${itemNames[extra]} x1`);
+    next = addLog(next, "salvage", "防水背包", "防水背包多护住了一件漂流物。", [`${itemNames[extra]} x1`]);
+  }
+  return addLog(next, "salvage", "打捞", `你从漂流木箱里找到了${itemNames[loot[0]]} x${loot[1]}。`, rewards);
 }
 
 function rollCardRarity(state: GameState, premium: boolean): Rarity {
@@ -544,7 +564,7 @@ export function buyShopItem(state: GameState, itemId: ItemId): GameState {
   if (state.coins < price) return addLog(state, "warning", "贝壳币不足", `还差 ${price - state.coins} 贝壳币，买不起${itemNames[itemId]}。`);
   const shopStock = state.shopStock.map((item) => item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item);
   let next = addItem({ ...state, coins: state.coins - price, shopStock }, itemId, 1);
-  if (["sturdyRod", "advancedRodItem", "fishingNet", "solarPurifier"].includes(itemId) && !next.equipment.includes(itemId)) {
+  if (["sturdyRod", "advancedRodItem", "fishingNet", "solarPurifier", "waterproofBackpack", "autoFisher"].includes(itemId) && !next.equipment.includes(itemId)) {
     next = { ...next, equipment: [...next.equipment, itemId] };
   }
   return addLog(next, "trade", "潮汐商店", `买下${itemNames[itemId]} x1，花费 ${price} 贝壳币。`, [`${itemNames[itemId]} x1`]);
@@ -560,7 +580,7 @@ export function cookRecipe(state: GameState, recipeId: string): GameState {
     return addLog(state, "warning", "材料不足", `还缺少${status.missing.join("、")}，无法制作${recipe.name}。`);
   }
 
-  let next = spendItems(state, recipe.fixedCost);
+  let next = spendItems(state, getEffectiveRecipeCost(state, recipe));
   const fishCollection = { ...next.fishCollection };
   status.selectedFish.forEach((fishItem) => {
     const entry = fishCollection[fishItem.id];
@@ -667,14 +687,32 @@ export function upgradeBoat(state: GameState): GameState {
 }
 
 export function repairBoat(state: GameState): GameState {
-  const cost: Partial<Record<ItemId, number>> = { wood: 3, scrap: 1 };
+  const hasToolbox = state.inventory.toolbox > 0;
+  const cost: Partial<Record<ItemId, number>> = hasToolbox ? { wood: 2 } : { wood: 3, scrap: 1 };
   const missing = describeMissingItems(state, cost);
 
   if (state.boatHp >= state.boatMaxHp) return addLog(state, "warning", "无需修理", "载具耐久已经是满的，先把材料留着吧。");
   if (missing.length) return addLog(state, "warning", "材料不足", `修理载具还缺：${missing.join("、")}。`);
 
   const next = spendItems(state, cost);
-  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + 20), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", "你敲敲补补修好了载具。", ["Boat HP +20"]);
+  const repairValue = hasToolbox ? 32 : 20;
+  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + repairValue), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", `你敲敲补补修好了载具。${hasToolbox ? "工具箱让修理更顺手。" : ""}`, [`Boat HP +${repairValue}`]);
+}
+
+export function placeInventoryFurniture(state: GameState, itemId: ItemId): GameState {
+  const furnitureNames: Partial<Record<ItemId, string>> = {
+    foldingChair: "折叠椅",
+    shellLamp: "贝壳灯",
+    waterproofMattress: "防水床垫",
+    simpleToilet: "简易马桶",
+    storageBox: "收纳箱",
+  };
+  const furniture = furnitureNames[itemId];
+  if (!furniture) return addLog(state, "warning", "家具", "这个物品暂时不能布置。");
+  if ((state.inventory[itemId] ?? 0) <= 0) return addLog(state, "warning", "家具", "背包里没有这件家具。");
+  if (state.furniture.includes(furniture)) return addLog(state, "warning", "家具", `你已经布置过「${furniture}」了。`);
+  const next = addItem(state, itemId, -1);
+  return addLog({ ...next, furniture: [...next.furniture, furniture], mood: clamp(next.mood + 6) }, "furniture", "布置家具", `你布置了「${furniture}」，海上小家更舒服了。`, [furniture, "Mood +6"]);
 }
 
 export function decorate(state: GameState): GameState {
@@ -763,6 +801,11 @@ export function endDay(state: GameState): GameState {
     next = addLog(next, "event", "自动净水器", "自动净水器安静工作了一夜。", ["淡水 x1"]);
   }
   if (next.equipment.includes("solarPurifier")) next = addLog(next, "event", "太阳能净水器", "白天积攒的阳光换成了一瓶淡水。", ["淡水 x1"]);
+  if (next.equipment.includes("autoFisher") && Math.random() < 0.35) {
+    const autoFish = pick(fishList.filter((fishItem) => fishItem.rarity === "Common"));
+    const result = addFish(next, autoFish, 1);
+    next = addLog(result.state, "fishing", "自动钓鱼器", `自动钓鱼器安静工作，钓到了「${autoFish.name}」x1。`, [`${autoFish.emoji} ${autoFish.name} x1`], result.isNew);
+  }
 
   if (nextWeather === "风暴") {
     const damage = Math.round(20 * (state.boatLevel === 1 ? 1.5 : state.boatLevel === 2 ? 1.1 : state.boatLevel === 3 ? 0.75 : 0.45));

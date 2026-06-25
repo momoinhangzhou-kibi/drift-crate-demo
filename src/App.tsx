@@ -23,6 +23,7 @@ import {
   loadGameWithLog,
   noteNoFood,
   openCrate,
+  placeInventoryFurniture,
   repairBoat,
   resetGame,
   salvage,
@@ -153,6 +154,7 @@ function App() {
   const [showCat, setShowCat] = useState(false);
   const [activePanel, setActivePanel] = useState<ModulePanel | undefined>();
   const [titlePanel, setTitlePanel] = useState<TitlePanel | undefined>();
+  const [selectedItem, setSelectedItem] = useState<ItemId | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
   const [musicOn, setMusicOn] = useState(() => readMusicSettings().on);
   const [musicMode, setMusicMode] = useState<MusicMode>(() => readMusicSettings().mode);
@@ -587,7 +589,7 @@ function App() {
 
           <section className="panel inventory">
             <h2>🎒 背包</h2>
-            <InventoryPanel state={state} filter={inventoryFilter} onFilter={setInventoryFilter} />
+            <InventoryPanel state={state} filter={inventoryFilter} onFilter={setInventoryFilter} onItemSelect={setSelectedItem} />
           </section>
 
           <section className="panel crate-panel">
@@ -666,6 +668,7 @@ function App() {
           completion={completion}
           inventoryFilter={inventoryFilter}
           onInventoryFilter={setInventoryFilter}
+          onItemSelect={setSelectedItem}
           onClose={() => setActivePanel(undefined)}
           onBuy={(item) => window.confirm(`购买 ${itemNames[item.id]}，花费 ${item.price} 贝壳币？`) && applyAction("购买", buyShopItem(state, item.id))}
           onSellFish={openSellPanel}
@@ -728,6 +731,20 @@ function App() {
           state={state}
           onClose={() => setShowCat(false)}
           onFeed={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
+        />
+      )}
+      {selectedItem && (
+        <ItemDetailModal
+          state={state}
+          itemId={selectedItem}
+          onClose={() => setSelectedItem(undefined)}
+          onEat={(itemId) => applyAction("使用物品", eatFood(state, itemId))}
+          onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
+          onOpenCrate={(crate) => {
+            applyAction(crate === "premiumCrate" ? "打开高级补给包" : "打开普通补给包", openCrate(state, crate));
+            setShowCrate(true);
+          }}
+          onDecorate={(itemId) => applyAction("布置家具", itemId === "furnitureTicket" ? decorate(state) : placeInventoryFurniture(state, itemId))}
         />
       )}
       {showTutorial && <TutorialModal onClose={(never) => { setShowTutorial(false); if (never) update({ ...state, tutorialSeen: true }); }} />}
@@ -940,6 +957,7 @@ function GameModulePanel({
   completion,
   inventoryFilter,
   onInventoryFilter,
+  onItemSelect,
   onClose,
   onBuy,
   onSellFish,
@@ -962,6 +980,7 @@ function GameModulePanel({
   completion: number;
   inventoryFilter: ItemCategory | "all";
   onInventoryFilter: (value: ItemCategory | "all") => void;
+  onItemSelect: (itemId: ItemId) => void;
   onClose: () => void;
   onBuy: (item: ShopItem) => void;
   onSellFish: (fishId?: string) => void;
@@ -992,7 +1011,7 @@ function GameModulePanel({
           <button className="compact-button" onClick={onClose}>关闭</button>
         </div>
 
-        {panel === "inventory" && <InventoryPanel state={state} filter={inventoryFilter} onFilter={onInventoryFilter} />}
+        {panel === "inventory" && <InventoryPanel state={state} filter={inventoryFilter} onFilter={onInventoryFilter} onItemSelect={onItemSelect} />}
 
         {panel === "shop" && (
           <div className="module-stack">
@@ -1400,7 +1419,7 @@ function TideShop({ state, onBuy }: { state: GameState; onBuy: (item: ShopItem) 
   );
 }
 
-function InventoryPanel({ state, filter, onFilter }: { state: GameState; filter: ItemCategory | "all"; onFilter: (value: ItemCategory | "all") => void }) {
+function InventoryPanel({ state, filter, onFilter, onItemSelect }: { state: GameState; filter: ItemCategory | "all"; onFilter: (value: ItemCategory | "all") => void; onItemSelect: (itemId: ItemId) => void }) {
   const items = (Object.keys(state.inventory) as ItemId[]).filter((id) => state.inventory[id] > 0 && (filter === "all" || itemMeta[id].category === filter));
   return (
     <>
@@ -1411,7 +1430,7 @@ function InventoryPanel({ state, filter, onFilter }: { state: GameState; filter:
       </div>
       <div className="inventory-grid">
         {items.length ? items.map((itemId) => (
-          <div className={`item has-item rarity-border-${itemMeta[itemId].rarity.toLowerCase()}`} key={itemId}>
+          <button className={`item has-item rarity-border-${itemMeta[itemId].rarity.toLowerCase()}`} key={itemId} onClick={() => onItemSelect(itemId)}>
             {(itemId === "commonCrate" || itemId === "premiumCrate") && <span className="item-badge">可开</span>}
             {itemMeta[itemId].category === "food" && <span className="item-badge">可吃</span>}
             {itemMeta[itemId].category === "furniture" && <span className="item-badge">可布置</span>}
@@ -1419,10 +1438,102 @@ function InventoryPanel({ state, filter, onFilter }: { state: GameState; filter:
             <span>{itemEmoji[itemId]}</span>
             <strong>{itemNames[itemId]}</strong>
             <em>x{state.inventory[itemId]}</em>
-          </div>
+          </button>
         )) : <p className="hint">这个分类暂时没有物品。</p>}
       </div>
     </>
+  );
+}
+
+const itemDetailText: Partial<Record<ItemId, { description: string; use: string; effect: string }>> = {
+  wood: { description: "漂在海上的基础木板。", use: "修理、升级载具，也能当作烹饪燃料。", effect: "材料本身不会直接生效。" },
+  plastic: { description: "轻便防水的漂流材料。", use: "升级载具和制作生活设施。", effect: "材料本身不会直接生效。" },
+  rope: { description: "能把松散木板牢牢绑住。", use: "升级载具、固定家具。", effect: "材料本身不会直接生效。" },
+  scrap: { description: "结实的金属铁片。", use: "升级和修理载具。", effect: "材料本身不会直接生效。" },
+  water: { description: "干净淡水。", use: "做饭、维持生活。", effect: "部分料理需要淡水。" },
+  toolbox: { description: "装满基础工具的小箱子。", use: "修理载具时自动生效。", effect: "修理消耗降低，Boat HP 恢复量提高。" },
+  waterproofBackpack: { description: "防水背包能保护打捞物资。", use: "获得后自动作为装备生效。", effect: "打捞时小概率额外获得材料。" },
+  solarPurifier: { description: "用阳光慢慢净化海水的小设备。", use: "获得后自动作为装备生效。", effect: "每天结束时淡水 +1。" },
+  autoFisher: { description: "会在夜里安静工作的简易钓鱼器。", use: "获得后自动作为装备生效。", effect: "每天结束时小概率获得普通鱼 x1。" },
+  advancedRodItem: { description: "比旧鱼竿更稳的高级钓具。", use: "获得后自动装备。", effect: "提高 Rare 以上鱼出现概率。" },
+  sturdyRod: { description: "更结实的钓鱼竿。", use: "获得后自动装备。", effect: "略微提高 Uncommon 和 Rare 鱼出现概率。" },
+  fishingNet: { description: "能一次捞住更多小鱼的渔网。", use: "获得后自动装备。", effect: "钓鱼时有概率额外获得鱼。" },
+  commonCrate: { description: "海上漂来的普通补给包。", use: "可以打开获得多件生活物资。", effect: "掉落基础材料、食物、小工具或少量稀有物。" },
+  premiumCrate: { description: "包得更严实的高级补给包。", use: "可以打开获得更多补给。", effect: "更容易出现高级材料、家具、装备和稀有物。" },
+  furnitureTicket: { description: "一张可以换来随机家具的券。", use: "点击布置，为海上小屋增加家具。", effect: "布置后 Mood 提升。" },
+};
+
+function getItemDetail(itemId: ItemId) {
+  const food = foodItems.find((item) => item.id === itemId);
+  if (food) return { description: food.description, use: "可以食用，也可能适合喂猫。", effect: `Hunger +${food.hunger}，Mood +${food.mood}` };
+  return itemDetailText[itemId] ?? {
+    description: `${itemNames[itemId]}是漂流生活中的常用物资。`,
+    use: itemMeta[itemId].category === "materials" ? "用于料理、升级、修理或后续制作。" : "在合适的场景中使用。",
+    effect: "没有即时效果，会在对应功能中消耗或生效。",
+  };
+}
+
+function ItemDetailModal({
+  state,
+  itemId,
+  onClose,
+  onEat,
+  onFeedCat,
+  onOpenCrate,
+  onDecorate,
+}: {
+  state: GameState;
+  itemId: ItemId;
+  onClose: () => void;
+  onEat: (itemId: ItemId) => void;
+  onFeedCat: (optionId: string) => void;
+  onOpenCrate: (crate: "commonCrate" | "premiumCrate") => void;
+  onDecorate: (itemId: ItemId) => void;
+}) {
+  const detail = getItemDetail(itemId);
+  const category = itemMeta[itemId].category;
+  const count = state.inventory[itemId] ?? 0;
+  const food = foodItems.find((item) => item.id === itemId);
+  const catOption = getCatFeedOptions(state).find((option) => option.itemId === itemId);
+  const crate = itemId === "commonCrate" || itemId === "premiumCrate" ? itemId : undefined;
+  const furnitureIds: ItemId[] = ["furnitureTicket", "foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox"];
+  const equipmentActive = state.equipment.includes(itemId) || (itemId === "advancedRodItem" && state.equipment.includes("advancedRod"));
+
+  const runAndClose = (action: () => void) => {
+    action();
+    onClose();
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="wide-modal item-detail-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">{categoryLabels[category]}</p>
+            <h2>{itemEmoji[itemId]} {itemNames[itemId]}</h2>
+          </div>
+          <button className="compact-button" onClick={onClose}>关闭</button>
+        </div>
+        <div className="item-detail-body">
+          <span className="item-detail-emoji">{itemEmoji[itemId]}</span>
+          <div>
+            <p><strong>数量：</strong>x{count}</p>
+            <p><strong>描述：</strong>{detail.description}</p>
+            <p><strong>用途：</strong>{detail.use}</p>
+            <p><strong>效果：</strong>{detail.effect}</p>
+            {category === "equipment" && <p className={equipmentActive ? "ready" : "hint"}>{equipmentActive ? "当前已装备/已生效。" : "获得后会自动装备或生效。"}</p>}
+          </div>
+        </div>
+        <div className="item-detail-actions">
+          {food && <button className="primary-action" onClick={() => runAndClose(() => onEat(itemId))}>使用 / 食用</button>}
+          {catOption && <button onClick={() => runAndClose(() => onFeedCat(catOption.id))}>喂猫</button>}
+          {crate && <button className="primary-action" onClick={() => runAndClose(() => onOpenCrate(crate))}>打开礼包</button>}
+          {furnitureIds.includes(itemId) && <button onClick={() => runAndClose(() => onDecorate(itemId))}>布置</button>}
+          {category === "equipment" && <button disabled>{equipmentActive ? "已装备" : "查看效果"}</button>}
+          {category === "materials" && <button disabled>材料会在制作/升级时使用</button>}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1785,7 +1896,7 @@ function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameStat
       </div>
       <div className="recipe-block">
         <strong>所需材料</strong>
-        <RequirementList state={state} items={recipe.fixedCost} />
+        <RequirementList state={state} items={status.effectiveCost} />
         {recipe.fishCount && (
           <span className={status.selectedFish.length >= recipe.fishCount ? "fish-requirement met" : "fish-requirement missing"}>
             🐟 {recipe.fishIds?.length ? recipe.fishIds.map((id) => fishList.find((fishItem) => fishItem.id === id)?.name ?? "指定鱼").join(" / ") : recipe.rareFishOnly ? "Rare以上鱼" : "Common/Uncommon鱼"} {status.selectedFish.length}/{recipe.fishCount}

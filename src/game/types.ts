@@ -28,6 +28,7 @@ export type ItemId =
   | "fishingNet"
   | "waterproofBackpack"
   | "solarPurifier"
+  | "autoFisher"
   | "foldingChair"
   | "shellLamp"
   | "waterproofMattress"
@@ -94,7 +95,7 @@ export interface Card {
   itemId?: ItemId;
   amount?: number;
   fishRarity?: FishRarity;
-  equipment?: "advancedRod" | "goldenRod" | "waterPurifier" | "grill" | "kitchen" | "shopPermit";
+  equipment?: "advancedRod" | "goldenRod" | "waterPurifier" | "grill" | "kitchen" | "shopPermit" | "autoFisher";
   furniture?: string;
 }
 
