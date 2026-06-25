@@ -139,7 +139,7 @@ function getFishCandidates(state: GameState, recipe: Recipe) {
   const candidates: Fish[] = [];
 
   fishList
-    .filter((fishItem) => allowedRarities.includes(fishItem.rarity))
+    .filter((fishItem) => (recipe.fishIds?.length ? recipe.fishIds.includes(fishItem.id) : allowedRarities.includes(fishItem.rarity)))
     .sort((a, b) => a.basePrice - b.basePrice)
     .forEach((fishItem) => {
       const count = state.fishCollection[fishItem.id]?.count ?? 0;
@@ -154,18 +154,26 @@ function getRecipeById(recipeId: string) {
 }
 
 export function getRecipeStatus(state: GameState, recipe: Recipe) {
+  const unlocked = !recipe.unlockDay || state.day >= recipe.unlockDay;
   const missing = formatMissingItems(state, recipe.fixedCost);
   const fishCandidates = getFishCandidates(state, recipe);
   const needFish = recipe.fishCount ?? 0;
 
   if (fishCandidates.length < needFish) {
-    missing.push(recipe.rareFishOnly ? `Rare以上鱼 ×${needFish - fishCandidates.length}` : `Common/Uncommon鱼 ×${needFish - fishCandidates.length}`);
+    const fishNeed = recipe.fishIds?.length
+      ? recipe.fishIds.map((id) => fishList.find((fishItem) => fishItem.id === id)?.name ?? "指定鱼").join(" / ")
+      : recipe.rareFishOnly
+        ? "Rare以上鱼"
+        : "Common/Uncommon鱼";
+    missing.push(`${fishNeed} ×${needFish - fishCandidates.length}`);
   }
 
   return {
-    canCook: missing.length === 0,
+    canCook: unlocked && missing.length === 0,
     missing,
     selectedFish: fishCandidates.slice(0, needFish),
+    unlocked,
+    unlockHint: recipe.unlockHint,
   };
 }
 
@@ -262,6 +270,30 @@ function pickFish(state: GameState, rarity = weightedRarity(state)) {
   return pick(weatherMatched.length && Math.random() < 0.65 ? weatherMatched : candidates);
 }
 
+function grantFishDexRewards(state: GameState): GameState {
+  const discovered = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
+  const completion = Math.floor((discovered / fishList.length) * 100);
+  const claimed = new Set(state.fishDexRewardsClaimed ?? []);
+  let next = state;
+
+  [25, 50, 75, 100].forEach((milestone) => {
+    if (completion < milestone || claimed.has(milestone)) return;
+    claimed.add(milestone);
+    next = { ...next, fishDexRewardsClaimed: Array.from(claimed).sort((a, b) => a - b) };
+    if (milestone === 25) {
+      next = addLog({ ...next, coins: next.coins + 20 }, "discovery", "图鉴奖励", "鱼类图鉴完成度达到 25%，获得 20 贝壳币。", ["+20 贝壳币"], true);
+    } else if (milestone === 50) {
+      next = addLog(addItem(next, "commonCrate", 1), "discovery", "图鉴奖励", "鱼类图鉴完成度达到 50%，获得普通补给包 x1。", ["普通补给包 x1"], true);
+    } else if (milestone === 75) {
+      next = addLog(addItem(next, "premiumCrate", 1), "discovery", "图鉴奖励", "鱼类图鉴完成度达到 75%，获得高级补给包 x1。", ["高级补给包 x1"], true);
+    } else {
+      next = addLog(addItem({ ...next, coins: next.coins + 100 }, "luckyShell", 1), "discovery", "图鉴大师", "鱼类图鉴 100% 完成！获得 Legendary 称号「星潮收藏家」、幸运贝壳 x1 和 100 贝壳币。", ["星潮收藏家", "幸运贝壳 x1", "+100 贝壳币"], true, true);
+    }
+  });
+
+  return next;
+}
+
 function addFish(state: GameState, fish: Fish, amount: number) {
   const current = state.fishCollection[fish.id] ?? { discovered: false, count: 0 };
   const isNew = !current.discovered;
@@ -275,7 +307,7 @@ function addFish(state: GameState, fish: Fish, amount: number) {
   };
 
   return {
-    state: { ...state, fishCollection, newestFishId: isNew ? fish.id : state.newestFishId },
+    state: isNew ? grantFishDexRewards({ ...state, fishCollection, newestFishId: fish.id }) : { ...state, fishCollection },
     isNew,
   };
 }
@@ -523,6 +555,7 @@ export function cookRecipe(state: GameState, recipeId: string): GameState {
   if (!recipe) return addLog(state, "warning", "未知食谱", "潮湿的菜谱糊成一团，看不清要做什么。");
 
   const status = getRecipeStatus(state, recipe);
+  if (!status.unlocked) return addLog(state, "warning", "菜谱未解锁", `${recipe.unlockHint ?? "这道料理还没解锁"}，暂时不能制作${recipe.name}。`);
   if (!status.canCook) {
     return addLog(state, "warning", "材料不足", `还缺少${status.missing.join("、")}，无法制作${recipe.name}。`);
   }
@@ -538,18 +571,11 @@ export function cookRecipe(state: GameState, recipeId: string): GameState {
   next = addItem({ ...next, fishCollection }, recipe.output, 1);
 
   const usedFishNames = status.selectedFish.map((fishItem) => `「${fishItem.name}」`);
-  const message =
-    recipe.id === "grilled-fish" && usedFishNames.length
-      ? `你用${usedFishNames[0]}做了一份烤鱼。`
-      : recipe.id === "fish-soup" && usedFishNames.length
-        ? `你用${usedFishNames[0]}煮好了一碗鱼汤，热气让小木筏都温暖起来。`
-        : recipe.id === "seafood-skewer" && usedFishNames.length
-          ? `你用${usedFishNames.join("和")}做了一份海鲜串，闻起来很香。`
-          : recipe.id === "deluxe-seafood-pot" && usedFishNames.length
-            ? `你用${usedFishNames[0]}做了一份豪华海鲜锅。`
-            : "你做好了一份漂流火锅，香味飘过了整片海面。";
+  const message = usedFishNames.length
+    ? `你用${usedFishNames.join("和")}做了一份${recipe.name}。`
+    : `你做好了一份${recipe.name}，海上小屋飘起了香味。`;
 
-  return addLog(next, "cooking", "料理", message, [`${recipe.emoji} ${recipe.name} x1`], recipe.id === "drift-hotpot" || recipe.id === "deluxe-seafood-pot");
+  return addLog(next, "cooking", "料理", message, [`${recipe.emoji} ${recipe.name} x1`], recipe.rarity === "Epic" || recipe.rarity === "Legendary");
 }
 
 export function cookHotpot(state: GameState): GameState {
@@ -804,7 +830,9 @@ function migrateState(raw: Partial<GameState>): GameState {
         )
     : initial.logs;
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs };
+  const fishDexRewardsClaimed = Array.isArray(raw.fishDexRewardsClaimed) ? raw.fishDexRewardsClaimed : [];
+
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed };
 }
 
 function readSavedPayload(): { state: GameState; savedAt?: string } | undefined {

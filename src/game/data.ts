@@ -49,6 +49,14 @@ export const itemNames: Record<ItemId, string> = {
   seafoodSkewer: "海鲜串",
   driftHotpot: "漂流火锅",
   deluxeSeafoodPot: "豪华海鲜锅",
+  grilledFishSkewer: "烤鱼串",
+  seafoodSoup: "海鲜汤",
+  shrimpRiceBall: "小虾饭团",
+  cannedRamen: "罐头泡面",
+  warmFishSoup: "暖暖鱼汤",
+  searedTuna: "香煎金枪鱼",
+  rainbowSashimi: "彩虹鱼刺身",
+  survivorFeast: "漂流者豪华套餐",
   commonFish: "普通鱼",
   rareFish: "稀有鱼",
   mysteryFish: "神秘鱼",
@@ -103,6 +111,14 @@ export const itemEmoji: Record<ItemId, string> = {
   seafoodSkewer: "🍢",
   driftHotpot: "🍲",
   deluxeSeafoodPot: "🥘",
+  grilledFishSkewer: "🍡",
+  seafoodSoup: "🥣",
+  shrimpRiceBall: "🍙",
+  cannedRamen: "🍜",
+  warmFishSoup: "♨️",
+  searedTuna: "🥩",
+  rainbowSashimi: "🍣",
+  survivorFeast: "🍱",
   commonFish: "🐟",
   rareFish: "🐠",
   mysteryFish: "✨",
@@ -113,7 +129,7 @@ export const disasterWeather: Weather[] = ["风暴", "高温", "寒潮", "暴雨
 
 export const itemMeta: Record<ItemId, ItemMeta> = Object.fromEntries(
   (Object.keys(itemNames) as ItemId[]).map((id) => {
-    const food = ["water", "biscuit", "cannedFood", "ramen", "chocolate", "compressedBiscuit", "grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot"].includes(id);
+    const food = ["water", "biscuit", "cannedFood", "ramen", "chocolate", "compressedBiscuit", "grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot", "grilledFishSkewer", "seafoodSoup", "shrimpRiceBall", "cannedRamen", "warmFishSoup", "searedTuna", "rainbowSashimi", "survivorFeast"].includes(id);
     const tools = ["wrench", "lighter", "flashlight", "toolbox", "repairTape"].includes(id);
     const hygiene = ["toiletPaper", "wetWipes", "sanitaryPad", "towel", "soap", "medkit"].includes(id);
     const furniture = ["foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox", "furnitureTicket"].includes(id);
@@ -210,21 +226,26 @@ export const boatHpByLevel: Record<BoatLevel, number> = {
 };
 
 export const fishList: Fish[] = [
-  { id: "blue-sardine", name: "蓝纹沙丁鱼", emoji: "🐟", rarity: "Common", description: "成群游过木筏边的小鱼，鳞片像蓝色手账贴纸。", basePrice: 4, weatherHint: ["晴天"], timeHint: "白天常见" },
-  { id: "drift-clown", name: "漂流小丑鱼", emoji: "🐠", rarity: "Common", description: "喜欢躲在塑料瓶旁边，好奇心很重。", basePrice: 5, weatherHint: ["晴天", "阴天"], timeHint: "天气温和时更多" },
-  { id: "clear-shrimp", name: "透明小虾", emoji: "🦐", rarity: "Common", description: "几乎看不见的小虾，装在碗里像一勺海风。", basePrice: 3, weatherHint: ["晴天"], timeHint: "清晨容易出现" },
-  { id: "shell-crab", name: "贝壳蟹", emoji: "🐚", rarity: "Common", description: "背着小贝壳慢慢爬，偶尔夹住钓线不肯放。", basePrice: 4, weatherHint: ["阴天"], timeHint: "午后常见" },
-  { id: "puff-puffer", name: "鼓气河豚", emoji: "🐡", rarity: "Uncommon", description: "受到惊吓会鼓成圆球，看起来像漂在海上的气球。", basePrice: 9, weatherHint: ["阴天"], timeHint: "风平浪静时出现" },
-  { id: "glow-squid", name: "夜光小鱿", emoji: "🦑", rarity: "Uncommon", description: "触须会发出淡淡蓝光，是夜晚海面的小灯。", basePrice: 10, weatherHint: ["大雾", "阴天"], timeHint: "傍晚以后" },
-  { id: "baby-octo", name: "章鱼宝宝", emoji: "🐙", rarity: "Uncommon", description: "会用触手偷摸木板，好像想帮你装修。", basePrice: 11, weatherHint: ["阴天"], timeHint: "午后" },
-  { id: "silver-flyfish", name: "银鳞飞鱼", emoji: "🐬", rarity: "Uncommon", description: "跃出海面时像一枚银色纸飞机。", basePrice: 12, weatherHint: ["晴天", "暴雨"], timeHint: "有浪时更多" },
-  { id: "rainbow-coral", name: "彩虹珊瑚鱼", emoji: "🐠", rarity: "Rare", description: "尾巴像彩虹糖纸，游过时连海水都亮了一点。", basePrice: 22, weatherHint: ["晴天"], timeHint: "阳光强时" },
-  { id: "red-lobster", name: "红钳龙虾", emoji: "🦞", rarity: "Rare", description: "挥舞着红色大钳子，像在给自己打广告。", basePrice: 24, weatherHint: ["暴雨", "阴天"], timeHint: "浪大时" },
-  { id: "moon-jelly", name: "月光水母", emoji: "🪼", rarity: "Rare", description: "透明伞盖里像藏了一小块月亮。", basePrice: 28, weatherHint: ["大雾"], timeHint: "夜色变深后" },
-  { id: "mist-eel", name: "海雾鳗", emoji: "🐉", rarity: "Epic", description: "从雾里滑出来又钻回去，只留下银色水痕。", basePrice: 55, weatherHint: ["大雾"], timeHint: "雾最浓的时候" },
-  { id: "gem-shark", name: "小型宝石鲨", emoji: "🦈", rarity: "Epic", description: "背鳍像一颗小宝石，游得很快但脾气不坏。", basePrice: 68, weatherHint: ["暴雨"], timeHint: "暴雨过后" },
-  { id: "star-koi", name: "星潮锦鲤", emoji: "✨", rarity: "Legendary", description: "传说会跟着星潮出现，鳞片像漂流夜空。", basePrice: 150, weatherHint: ["大雾"], timeHint: "极少出现" },
-  { id: "gold-boxfish", name: "黄金箱鲷", emoji: "👑", rarity: "Legendary", description: "方方正正、金光闪闪，看起来像补给箱成精。", basePrice: 180, weatherHint: ["晴天", "大雾"], timeHint: "好运爆棚时" },
+  { id: "tiny-minnow", name: "普通小鱼", emoji: "🐟", rarity: "Common", description: "最常陪着木筏游的小鱼，虽然普通，但很有安全感。", basePrice: 2, weatherHint: ["晴天", "阴天"], timeHint: "全天常见", cookingTag: "basic" },
+  { id: "clear-shrimp", name: "透明小虾", emoji: "🦐", rarity: "Common", description: "几乎看不见的小虾，装在碗里像一勺海风。", basePrice: 3, weatherHint: ["晴天"], timeHint: "清晨容易出现", cookingTag: "shrimp" },
+  { id: "blue-sardine", name: "蓝纹沙丁鱼", emoji: "🐟", rarity: "Common", description: "成群游过木筏边的小鱼，鳞片像蓝色手账贴纸。", basePrice: 4, weatherHint: ["晴天"], timeHint: "白天常见", cookingTag: "basic" },
+  { id: "shell-crab", name: "贝壳蟹", emoji: "🐚", rarity: "Common", description: "背着小贝壳慢慢爬，偶尔夹住钓线不肯放。", basePrice: 4, weatherHint: ["阴天"], timeHint: "午后常见", cookingTag: "shellfish" },
+  { id: "drift-clown", name: "漂流小丑鱼", emoji: "🐠", rarity: "Common", description: "喜欢躲在塑料瓶旁边，好奇心很重。", basePrice: 5, weatherHint: ["晴天", "阴天"], timeHint: "天气温和时更多", cookingTag: "basic" },
+  { id: "silver-flyfish", name: "银鳞飞鱼", emoji: "🐬", rarity: "Uncommon", description: "跃出海面时像一枚银色纸飞机。", basePrice: 12, weatherHint: ["晴天", "暴雨"], timeHint: "有浪时更多", cookingTag: "basic" },
+  { id: "puff-puffer", name: "鼓气河豚", emoji: "🐡", rarity: "Uncommon", description: "受到惊吓会鼓成圆球，看起来像漂在海上的气球。", basePrice: 9, weatherHint: ["阴天"], timeHint: "风平浪静时出现", cookingTag: "basic" },
+  { id: "glow-squid", name: "夜光小鱿", emoji: "🦑", rarity: "Uncommon", description: "触须会发出淡淡蓝光，是夜晚海面的小灯。", basePrice: 10, weatherHint: ["大雾", "阴天"], timeHint: "傍晚以后", cookingTag: "squid" },
+  { id: "baby-octo", name: "章鱼宝宝", emoji: "🐙", rarity: "Uncommon", description: "会用触手偷摸木板，好像想帮你装修。", basePrice: 11, weatherHint: ["阴天"], timeHint: "午后", cookingTag: "octopus" },
+  { id: "tuna-bluefin", name: "海风金枪鱼", emoji: "🐟", rarity: "Rare", description: "肉质扎实的大鱼，煎起来会让整个小屋都香起来。", basePrice: 26, weatherHint: ["晴天", "暴雨"], timeHint: "浪起时", cookingTag: "tuna" },
+  { id: "rainbow-coral", name: "彩虹鱼", emoji: "🐠", rarity: "Rare", description: "尾巴像彩虹糖纸，游过时连海水都亮了一点。", basePrice: 22, weatherHint: ["晴天"], timeHint: "阳光强时", cookingTag: "rainbow" },
+  { id: "red-lobster", name: "红钳龙虾", emoji: "🦞", rarity: "Rare", description: "挥舞着红色大钳子，像在给自己打广告。", basePrice: 24, weatherHint: ["暴雨", "阴天"], timeHint: "浪大时", cookingTag: "shellfish" },
+  { id: "moon-jelly", name: "月光水母", emoji: "🪼", rarity: "Rare", description: "透明伞盖里像藏了一小块月亮。", basePrice: 28, weatherHint: ["大雾"], timeHint: "夜色变深后", cookingTag: "rare" },
+  { id: "angler-lamp", name: "深海灯笼鱼", emoji: "🏮", rarity: "Epic", description: "头顶一点暖光，像从深海提着灯来拜访。", basePrice: 60, weatherHint: ["大雾", "暴雨"], timeHint: "深夜传说", cookingTag: "rare" },
+  { id: "golden-snapper", name: "黄金鲷鱼", emoji: "🐡", rarity: "Epic", description: "金色鱼鳞闪得像贝壳币，卖掉或收藏都会犹豫。", basePrice: 72, weatherHint: ["晴天"], timeHint: "好运时", cookingTag: "rare" },
+  { id: "mist-eel", name: "海雾鳗", emoji: "🐉", rarity: "Epic", description: "从雾里滑出来又钻回去，只留下银色水痕。", basePrice: 55, weatherHint: ["大雾"], timeHint: "雾最浓的时候", cookingTag: "rare" },
+  { id: "gem-shark", name: "小型宝石鲨", emoji: "🦈", rarity: "Epic", description: "背鳍像一颗小宝石，游得很快但脾气不坏。", basePrice: 68, weatherHint: ["暴雨"], timeHint: "暴雨过后", cookingTag: "rare" },
+  { id: "starfish-dream", name: "星星鱼", emoji: "⭐", rarity: "Legendary", description: "它不像鱼，更像一小块被海浪带来的愿望。", basePrice: 135, weatherHint: ["大雾"], timeHint: "星光很亮时", cookingTag: "legend" },
+  { id: "star-koi", name: "传说锦鲤", emoji: "✨", rarity: "Legendary", description: "传说会跟着星潮出现，鳞片像漂流夜空。", basePrice: 150, weatherHint: ["大雾"], timeHint: "极少出现", cookingTag: "legend" },
+  { id: "gold-boxfish", name: "黄金箱鲷", emoji: "👑", rarity: "Legendary", description: "方方正正、金光闪闪，看起来像补给箱成精。", basePrice: 180, weatherHint: ["晴天", "大雾"], timeHint: "好运爆棚时", cookingTag: "legend" },
 ];
 
 export const initialInventory: Record<ItemId, number> = {
@@ -276,6 +297,14 @@ export const initialInventory: Record<ItemId, number> = {
   seafoodSkewer: 0,
   driftHotpot: 0,
   deluxeSeafoodPot: 0,
+  grilledFishSkewer: 0,
+  seafoodSoup: 0,
+  shrimpRiceBall: 0,
+  cannedRamen: 0,
+  warmFishSoup: 0,
+  searedTuna: 0,
+  rainbowSashimi: 0,
+  survivorFeast: 0,
   commonFish: 0,
   rareFish: 0,
   mysteryFish: 0,
@@ -292,14 +321,30 @@ export const foodItems: Food[] = [
   { id: "seafoodSkewer", name: "海鲜串", emoji: "🍢", hunger: 40, mood: 10, description: "把今天的收获串起来烤，意外地很香。" },
   { id: "driftHotpot", name: "漂流火锅", emoji: "🍲", hunger: 50, mood: 30, description: "在海上煮火锅，这就是漂流生活的最高奢侈。" },
   { id: "deluxeSeafoodPot", name: "豪华海鲜锅", emoji: "🥘", hunger: 45, mood: 25, description: "高级鱼做出来的海鲜锅，心情大幅提升。" },
+  { id: "grilledFishSkewer", name: "烤鱼串", emoji: "🍡", hunger: 32, mood: 7, description: "切成小块串起来烤，适合边看海边吃。" },
+  { id: "seafoodSoup", name: "海鲜汤", emoji: "🥣", hunger: 38, mood: 12, description: "虾蟹和小鱼一起熬成的热汤，很有海上小家的味道。" },
+  { id: "shrimpRiceBall", name: "小虾饭团", emoji: "🍙", hunger: 28, mood: 10, description: "把透明小虾包进饭团里，猫猫也会盯着看。" },
+  { id: "cannedRamen", name: "罐头泡面", emoji: "🍜", hunger: 46, mood: 14, description: "把罐头倒进泡面里，是漂流者的深夜快乐。" },
+  { id: "warmFishSoup", name: "暖暖鱼汤", emoji: "♨️", hunger: 42, mood: 18, description: "多加一份淡水慢慢熬，喝完整个人都暖起来。" },
+  { id: "searedTuna", name: "香煎金枪鱼", emoji: "🥩", hunger: 48, mood: 18, description: "Rare 金枪鱼煎到两面金黄，像海上餐厅的招牌菜。" },
+  { id: "rainbowSashimi", name: "彩虹鱼刺身", emoji: "🍣", hunger: 36, mood: 28, description: "颜色漂亮到舍不得吃，心情会被瞬间点亮。" },
+  { id: "survivorFeast", name: "漂流者豪华套餐", emoji: "🍱", hunger: 65, mood: 35, description: "鱼、热汤和甜味补给都摆上桌，今天像节日。" },
 ];
 
 export const recipes: Recipe[] = [
-  { id: "grilled-fish", name: "烤鱼", emoji: "🍖", description: "最基础的漂流食物，虽然简单但很可靠。", output: "grilledFish", fixedCost: { wood: 1 }, fishCount: 1 },
-  { id: "fish-soup", name: "鱼汤", emoji: "🍵", description: "热乎乎的鱼汤让人恢复了一点精神。", output: "fishSoup", fixedCost: { water: 1 }, fishCount: 1 },
-  { id: "seafood-skewer", name: "海鲜串", emoji: "🍢", description: "把今天的收获串起来烤，意外地很香。", output: "seafoodSkewer", fixedCost: { wood: 1 }, fishCount: 2 },
-  { id: "drift-hotpot", name: "漂流火锅", emoji: "🍲", description: "在海上煮火锅，这就是漂流生活的最高奢侈。", output: "driftHotpot", fixedCost: { hotpotBase: 1, veggiePack: 1, meatSlices: 1, water: 1 } },
-  { id: "deluxe-seafood-pot", name: "豪华海鲜锅", emoji: "🥘", description: "高级鱼做出来的海鲜锅，心情大幅提升。", output: "deluxeSeafoodPot", fixedCost: { veggiePack: 1, water: 1 }, fishCount: 1, rareFishOnly: true, allowRareFish: true },
+  { id: "grilled-fish", name: "烤鱼", emoji: "🍖", description: "最基础的漂流食物，虽然简单但很可靠。", output: "grilledFish", fixedCost: { wood: 1 }, fishCount: 1, rarity: "Common", catFavorite: true },
+  { id: "fish-soup", name: "鱼汤", emoji: "🍵", description: "热乎乎的鱼汤让人恢复了一点精神。", output: "fishSoup", fixedCost: { water: 1 }, fishCount: 1, rarity: "Common", catFavorite: true },
+  { id: "grilled-fish-skewer", name: "烤鱼串", emoji: "🍡", description: "把鱼肉切成小块串起来，烤到边缘微焦。", output: "grilledFishSkewer", fixedCost: { wood: 1 }, fishCount: 1, rarity: "Common", catFavorite: true },
+  { id: "seafood-skewer", name: "海鲜串", emoji: "🍢", description: "把今天的收获串起来烤，意外地很香。", output: "seafoodSkewer", fixedCost: { wood: 1 }, fishCount: 2, rarity: "Uncommon" },
+  { id: "shrimp-rice-ball", name: "小虾饭团", emoji: "🍙", description: "透明小虾做成的小饭团，轻巧又治愈。", output: "shrimpRiceBall", fixedCost: { biscuit: 1 }, fishCount: 1, fishIds: ["clear-shrimp"], rarity: "Uncommon", catFavorite: true },
+  { id: "seafood-soup", name: "海鲜汤", emoji: "🥣", description: "虾蟹小鱼一起煮，像把海风熬进锅里。", output: "seafoodSoup", fixedCost: { water: 1, veggiePack: 1 }, fishCount: 2, rarity: "Rare", unlockDay: 3, unlockHint: "Day 3 解锁" },
+  { id: "canned-ramen", name: "罐头泡面", emoji: "🍜", description: "补给包料理的灵魂：罐头、泡面、热水。", output: "cannedRamen", fixedCost: { cannedFood: 1, ramen: 1, water: 1 }, rarity: "Rare", unlockDay: 4, unlockHint: "Day 4 解锁" },
+  { id: "warm-fish-soup", name: "暖暖鱼汤", emoji: "♨️", description: "多花一点淡水慢慢煮，寒潮前最安心。", output: "warmFishSoup", fixedCost: { water: 2 }, fishCount: 1, rarity: "Rare", unlockDay: 5, unlockHint: "Day 5 解锁", catFavorite: true },
+  { id: "seared-tuna", name: "香煎金枪鱼", emoji: "🥩", description: "只用海风金枪鱼做的招牌硬菜。", output: "searedTuna", fixedCost: { wood: 1, tape: 1 }, fishCount: 1, fishIds: ["tuna-bluefin"], rarity: "Epic", unlockDay: 6, unlockHint: "需要钓到海风金枪鱼" },
+  { id: "rainbow-sashimi", name: "彩虹鱼刺身", emoji: "🍣", description: "用彩虹鱼做出的漂亮刺身，像在吃一片晴天。", output: "rainbowSashimi", fixedCost: { water: 1 }, fishCount: 1, fishIds: ["rainbow-coral"], rarity: "Epic", unlockDay: 6, unlockHint: "需要钓到彩虹鱼" },
+  { id: "drift-hotpot", name: "海上火锅", emoji: "🍲", description: "在海上煮火锅，这就是漂流生活的最高奢侈。", output: "driftHotpot", fixedCost: { hotpotBase: 1, veggiePack: 1, meatSlices: 1, water: 1 }, rarity: "Epic", unlockDay: 7, unlockHint: "Day 7 解锁" },
+  { id: "deluxe-seafood-pot", name: "豪华海鲜锅", emoji: "🥘", description: "高级鱼做出来的海鲜锅，心情大幅提升。", output: "deluxeSeafoodPot", fixedCost: { veggiePack: 1, water: 1 }, fishCount: 1, rareFishOnly: true, allowRareFish: true, rarity: "Epic", unlockDay: 8, unlockHint: "Day 8 后用 Rare 以上鱼制作" },
+  { id: "survivor-feast", name: "漂流者豪华套餐", emoji: "🍱", description: "高级鱼、蔬菜和肉片摆满桌，像给自己办了一场庆功宴。", output: "survivorFeast", fixedCost: { veggiePack: 1, meatSlices: 1, chocolate: 1, water: 1 }, fishCount: 1, rareFishOnly: true, allowRareFish: true, rarity: "Legendary", unlockDay: 10, unlockHint: "Day 10 后解锁" },
 ];
 
 export const cards: Card[] = [
@@ -356,6 +401,7 @@ export function createInitialState(): GameState {
     tradePrices: { commonFish: 3, rareFish: 10, mysteryFish: 45 },
     shopStock: createShopStock(1),
     cat: createCatState("black"),
+    fishDexRewardsClaimed: [],
     logs: [
       {
         id: crypto.randomUUID(),

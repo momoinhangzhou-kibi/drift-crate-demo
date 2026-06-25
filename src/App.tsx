@@ -48,7 +48,7 @@ const materialOrder: ItemId[] = [
   "premiumCrate",
 ];
 
-const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot"];
+const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "grilledFishSkewer", "seafoodSkewer", "shrimpRiceBall", "seafoodSoup", "cannedRamen", "warmFishSoup", "searedTuna", "rainbowSashimi", "driftHotpot", "deluxeSeafoodPot", "survivorFeast"];
 const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
 
 type ViewState = "title" | "talentSelect" | "catSelect" | "playing" | "loadMenu";
@@ -401,7 +401,7 @@ function App() {
               <h2>📘 钓鱼图鉴</h2>
               {state.newestFishId && <span className="new-pill">NEW</span>}
             </div>
-            <p className="dex-summary">已发现 {discoveredCount}/{fishList.length} 种鱼，完成度 {completion}%</p>
+            <FishDexSummary state={state} discoveredCount={discoveredCount} completion={completion} />
             <div className="fishdex-grid">
               {fishList.map((fishItem) => (
                 <FishDexCard key={fishItem.id} fish={fishItem} state={state} />
@@ -604,11 +604,13 @@ function buildFeedback(title: string, before: GameState, after: GameState): Feed
   }
 
   const rarity = strongestFeedbackRarity(gains.concat(costs), newLogs);
+  const discoveryLog = newLogs.find((log) => log.type === "discovery" && (log.message.includes("首次钓到") || log.message.includes("补给包里发现")));
+  const newFish = fishList.find((fishItem) => discoveryLog?.message.includes(fishItem.name));
 
   return {
-    title,
-    icon: primaryLog ? feedbackIcon(primaryLog.type) : "✨",
-    message: primaryLog?.message,
+    title: newFish ? "新图鉴解锁！" : title,
+    icon: newFish ? newFish.emoji : primaryLog ? feedbackIcon(primaryLog.type) : "✨",
+    message: newFish ? `${newFish.name} · ${newFish.rarity} · 售价 ${newFish.basePrice} 贝壳币` : primaryLog?.message,
     gains,
     costs,
     stats,
@@ -819,7 +821,7 @@ function GameModulePanel({
 
         {panel === "dex" && (
           <>
-            <p className="dex-summary">已发现 {fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length}/{fishList.length} · 完成度 {completion}%</p>
+            <FishDexSummary state={state} discoveredCount={fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length} completion={completion} />
             <div className="fishdex-grid">
               {fishList.map((fishItem) => <FishDexCard key={fishItem.id} fish={fishItem} state={state} />)}
             </div>
@@ -1377,6 +1379,32 @@ function FishTradeCard({ fish, state, onSell }: { fish: Fish; state: GameState; 
   );
 }
 
+function FishDexSummary({ state, discoveredCount, completion }: { state: GameState; discoveredCount: number; completion: number }) {
+  const rewards = [
+    { milestone: 25, label: "25% · 贝壳币 +20" },
+    { milestone: 50, label: "50% · 普通补给包 x1" },
+    { milestone: 75, label: "75% · 高级补给包 x1" },
+    { milestone: 100, label: "100% · 星潮收藏家" },
+  ];
+
+  return (
+    <div className="dex-summary">
+      <div>
+        <strong>鱼类收集卡册</strong>
+        <span>已发现 {discoveredCount}/{fishList.length} 种鱼 · 完成度 {completion}%</span>
+      </div>
+      <div className="dex-progress"><span style={{ width: `${completion}%` }} /></div>
+      <div className="dex-rewards">
+        {rewards.map((reward) => {
+          const claimed = state.fishDexRewardsClaimed?.includes(reward.milestone);
+          const ready = completion >= reward.milestone;
+          return <span className={claimed ? "claimed" : ready ? "ready" : ""} key={reward.milestone}>{claimed ? "已领取" : ready ? "可领取" : "未达成"} · {reward.label}</span>;
+        })}
+      </div>
+    </div>
+  );
+}
+
 function FishDexCard({ fish, state }: { fish: Fish; state: GameState }) {
   const entry = state.fishCollection[fish.id];
   const discovered = !!entry?.discovered;
@@ -1385,18 +1413,18 @@ function FishDexCard({ fish, state }: { fish: Fish; state: GameState }) {
   return (
     <article className={`fish-card rarity-fish-${fish.rarity.toLowerCase()} ${discovered ? "discovered" : "unknown"} ${isNew ? "new-discovery" : ""}`}>
       {isNew && <span className="new-pill">NEW</span>}
-      <span className="fish-icon">{discovered ? fish.emoji : "❔"}</span>
-      <h3>{discovered ? fish.name : "？？？"}</h3>
-      <strong>{discovered ? fish.rarity : "Unknown"}</strong>
-      <p>{discovered ? fish.description : "还没有发现这种鱼。"}</p>
-      {discovered && (
-        <div className="fish-meta">
-          <span>基础价 {fish.basePrice} 🐚</span>
-          <span>已钓到 {entry?.count ?? 0}</span>
-          <span>{fish.weatherHint?.join(" / ")}</span>
-          <span>{fish.timeHint}</span>
-        </div>
-      )}
+      <div className="fish-card-top">
+        <span className="fish-icon">{discovered ? fish.emoji : "?"}</span>
+        <span className="rarity-chip">{fish.rarity}</span>
+      </div>
+      <h3>{discovered ? fish.name : "???"}</h3>
+      <p>{discovered ? fish.description : "这张卡还没有点亮，描述被海雾藏起来了。"}</p>
+      <div className="fish-meta">
+        <span>售价 {discovered ? fish.basePrice : "?"} 🐚</span>
+        <span>天气 {discovered ? fish.weatherHint?.join(" / ") : "???"}</span>
+        <span>条件 {discovered ? fish.timeHint : "???"}</span>
+        <span>拥有 {entry?.count ?? 0}</span>
+      </div>
     </article>
   );
 }
@@ -1443,10 +1471,12 @@ function CookingModal({ state, onClose, onCook }: { state: GameState; onClose: (
 function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameState; onCook: () => void }) {
   const status = getRecipeStatus(state, recipe);
   const food = foodItems.find((item) => item.id === recipe.output);
+  const rarity = recipe.rarity ?? "Common";
 
   return (
-    <article className={`recipe-card ${status.canCook ? "craftable" : ""}`}>
+    <article className={`recipe-card recipe-rarity-${rarity.toLowerCase()} ${status.canCook ? "craftable" : ""} ${status.unlocked ? "" : "locked"}`}>
       {status.canCook && <span className="item-badge">可制作</span>}
+      {!status.unlocked && <span className="item-badge locked-badge">未解锁</span>}
       <div className="recipe-title">
         <span>{recipe.emoji}</span>
         <div>
@@ -1454,12 +1484,17 @@ function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameStat
           <p>{recipe.description}</p>
         </div>
       </div>
+      <div className="recipe-tags">
+        <span>{rarity}</span>
+        <span>{status.unlocked ? "已解锁" : recipe.unlockHint ?? "未解锁"}</span>
+        {recipe.catFavorite && <span>猫猫也喜欢</span>}
+      </div>
       <div className="recipe-block">
         <strong>所需材料</strong>
         <RequirementList state={state} items={recipe.fixedCost} />
         {recipe.fishCount && (
           <span className={status.selectedFish.length >= recipe.fishCount ? "fish-requirement met" : "fish-requirement missing"}>
-            🐟 {recipe.rareFishOnly ? "Rare以上鱼" : "Common/Uncommon鱼"} {status.selectedFish.length}/{recipe.fishCount}
+            🐟 {recipe.fishIds?.length ? recipe.fishIds.map((id) => fishList.find((fishItem) => fishItem.id === id)?.name ?? "指定鱼").join(" / ") : recipe.rareFishOnly ? "Rare以上鱼" : "Common/Uncommon鱼"} {status.selectedFish.length}/{recipe.fishCount}
           </span>
         )}
       </div>
@@ -1467,8 +1502,8 @@ function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameStat
         <span>获得：{itemEmoji[recipe.output]} {itemNames[recipe.output]} x1</span>
         {food && <span>进食效果：Hunger +{food.hunger} / Mood +{food.mood}</span>}
       </div>
-      <p className={status.canCook ? "ready" : "hint"}>{status.canCook ? "材料齐了，可以制作。" : `还缺：${status.missing.join("、")}`}</p>
-      <button className={status.canCook ? "primary-action" : ""} aria-disabled={!status.canCook} onClick={onCook}>制作</button>
+      <p className={status.canCook ? "ready" : "hint"}>{status.canCook ? "材料齐了，可以制作。" : status.unlocked ? `还缺：${status.missing.join("、")}` : recipe.unlockHint ?? "继续漂流后解锁。"}</p>
+      <button className={status.canCook ? "primary-action" : ""} disabled={!status.canCook} onClick={onCook}>制作</button>
     </article>
   );
 }

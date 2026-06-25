@@ -47,6 +47,14 @@ export type ItemId =
   | "seafoodSkewer"
   | "driftHotpot"
   | "deluxeSeafoodPot"
+  | "grilledFishSkewer"
+  | "seafoodSoup"
+  | "shrimpRiceBall"
+  | "cannedRamen"
+  | "warmFishSoup"
+  | "searedTuna"
+  | "rainbowSashimi"
+  | "survivorFeast"
   | "commonFish"
   | "rareFish"
   | "mysteryFish";
@@ -68,6 +76,7 @@ export interface Fish {
   basePrice: number;
   weatherHint?: Weather[];
   timeHint?: string;
+  cookingTag?: string;
 }
 
 export interface FishCollectionEntry {
@@ -162,6 +171,11 @@ export interface Recipe {
   fishCount?: number;
   rareFishOnly?: boolean;
   allowRareFish?: boolean;
+  fishIds?: string[];
+  rarity?: FishRarity;
+  unlockDay?: number;
+  unlockHint?: string;
+  catFavorite?: boolean;
 }
 
 export type LogType =
@@ -215,6 +229,7 @@ export interface GameState {
   logs: LogEntry[];
   shopStock: ShopItem[];
   cat: CatState;
+  fishDexRewardsClaimed: number[];
   gameOverReason?: string;
   tutorialSeen?: boolean;
   lastCard?: Card;
