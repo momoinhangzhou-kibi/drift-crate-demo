@@ -1,4 +1,4 @@
-import { BoatLevel, Card, Fish, FishCollectionEntry, FishPrices, Food, GameState, ItemId, ItemMeta, Recipe, ShopItem, Talent, Weather } from "./types";
+import { BoatLevel, Card, CatOption, CatState, CatType, Fish, FishCollectionEntry, FishPrices, Food, GameState, ItemId, ItemMeta, Recipe, ShopItem, Talent, Weather } from "./types";
 
 export const itemNames: Record<ItemId, string> = {
   wood: "木板",
@@ -144,6 +144,56 @@ export const talents: Talent[] = [
   { id: "lucky", name: "幸运漂流者", emoji: "🍀", description: "开补给包时 Rare 以上概率上升。" },
   { id: "crafting", name: "手作达人", emoji: "🔨", description: "载具升级需要的材料减少 20%。" },
 ];
+
+export const catOptions: CatOption[] = [
+  {
+    type: "black",
+    defaultName: "kibi",
+    breed: "黑猫",
+    emoji: "🐈‍⬛",
+    personality: "安静、神秘、会盯着海面发呆。",
+    bonus: "初始 Mood +3。",
+    recommended: true,
+  },
+  {
+    type: "cow",
+    defaultName: "小漂",
+    breed: "奶牛猫",
+    emoji: "🐈",
+    personality: "活泼、爱撒娇、喜欢鱼。",
+    bonus: "钓鱼后小概率额外 Mood +1。",
+  },
+  {
+    type: "orange",
+    defaultName: "橘子",
+    breed: "橘猫",
+    emoji: "🐱",
+    personality: "贪吃、乐天、喜欢睡在补给箱旁边。",
+    bonus: "喂食收益略高。",
+  },
+  {
+    type: "calico",
+    defaultName: "花花",
+    breed: "三花猫",
+    emoji: "🐈",
+    personality: "聪明、好奇、喜欢翻背包。",
+    bonus: "每日小概率发现材料。",
+  },
+];
+
+export function createCatState(type: CatType = "black"): CatState {
+  const option = catOptions.find((cat) => cat.type === type) ?? catOptions[0];
+  return {
+    type: option.type,
+    name: option.defaultName,
+    breed: option.breed,
+    emoji: option.emoji,
+    intimacy: 10,
+    satiety: 60,
+    mood: 70,
+    todayEvent: "它正安静适应这片海。",
+  };
+}
 
 export const boatNames: Record<BoatLevel, string> = {
   1: "破旧木筏",
@@ -305,6 +355,7 @@ export function createInitialState(): GameState {
     fishPrices: createBaseFishPrices(),
     tradePrices: { commonFish: 3, rareFish: 10, mysteryFish: 45 },
     shopStock: createShopStock(1),
+    cat: createCatState("black"),
     logs: [
       {
         id: crypto.randomUUID(),

@@ -57,6 +57,7 @@ export type Weather = "晴天" | "阴天" | "小雨" | "暴雨" | "大雾" | "�
 export type BoatLevel = 1 | 2 | 3 | 4;
 export type TalentId = "fishing" | "trading" | "lucky" | "crafting";
 export type ItemCategory = "materials" | "food" | "tools" | "hygiene" | "furniture" | "equipment" | "special";
+export type CatType = "black" | "cow" | "orange" | "calico";
 
 export interface Fish {
   id: string;
@@ -93,6 +94,39 @@ export interface Talent {
   name: string;
   description: string;
   emoji: string;
+}
+
+export interface CatOption {
+  type: CatType;
+  defaultName: string;
+  breed: string;
+  emoji: string;
+  personality: string;
+  bonus: string;
+  recommended?: boolean;
+}
+
+export interface CatState {
+  type: CatType;
+  name: string;
+  breed: string;
+  emoji: string;
+  intimacy: number;
+  satiety: number;
+  mood: number;
+  todayEvent?: string;
+}
+
+export interface CatFeedOption {
+  id: string;
+  label: string;
+  emoji: string;
+  catSatiety: number;
+  catIntimacy: number;
+  catMood: number;
+  playerMood: number;
+  itemId?: ItemId;
+  fishIds?: string[];
 }
 
 export interface Food {
@@ -180,6 +214,7 @@ export interface GameState {
   tradePrices: TradePrices;
   logs: LogEntry[];
   shopStock: ShopItem[];
+  cat: CatState;
   gameOverReason?: string;
   tutorialSeen?: boolean;
   lastCard?: Card;

@@ -2,6 +2,7 @@ import {
   boatHpByLevel,
   cards,
   createBaseFishPrices,
+  createCatState,
   createFishCollection,
   createInitialState,
   createShopStock,
@@ -9,13 +10,14 @@ import {
   fishList,
   foodItems,
   furniturePool,
+  itemEmoji,
   itemMeta,
   itemNames,
   recipes,
   upgradeRequirements,
   weatherList,
 } from "./data";
-import { BoatLevel, Fish, FishRarity, GameState, ItemId, LogType, Rarity, Recipe, TalentId, TradePrices } from "./types";
+import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishRarity, GameState, ItemId, LogType, Rarity, Recipe, TalentId, TradePrices } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
 
@@ -43,6 +45,20 @@ function randomInt(min: number, max: number) {
 
 function pick<T>(list: T[]) {
   return list[Math.floor(Math.random() * list.length)];
+}
+
+function updateCat(state: GameState, patch: Partial<CatState>): GameState {
+  const cat = state.cat ?? createCatState("black");
+  return {
+    ...state,
+    cat: {
+      ...cat,
+      ...patch,
+      intimacy: clamp(patch.intimacy ?? cat.intimacy),
+      satiety: clamp(patch.satiety ?? cat.satiety),
+      mood: clamp(patch.mood ?? cat.mood),
+    },
+  };
 }
 
 function addLog(
@@ -163,6 +179,26 @@ export function canCookAnyRecipe(state: GameState) {
 
 export function hasEdibleFood(state: GameState) {
   return foodItems.some((food) => (state.inventory[food.id] ?? 0) > 0);
+}
+
+function getLowestOwnedFish(state: GameState, predicate: (fish: Fish) => boolean) {
+  return fishList
+    .filter((fishItem) => predicate(fishItem) && (state.fishCollection[fishItem.id]?.count ?? 0) > 0)
+    .sort((a, b) => a.basePrice - b.basePrice)[0];
+}
+
+export function getCatFeedOptions(state: GameState): CatFeedOption[] {
+  const commonFish = getLowestOwnedFish(state, (fishItem) => fishItem.rarity === "Common" || fishItem.rarity === "Uncommon");
+  const shrimp = fishList.find((fishItem) => fishItem.id === "clear-shrimp" && (state.fishCollection[fishItem.id]?.count ?? 0) > 0);
+  const rareFish = getLowestOwnedFish(state, (fishItem) => fishItem.rarity === "Rare" || fishItem.rarity === "Epic" || fishItem.rarity === "Legendary");
+  return [
+    commonFish && { id: "common-fish", label: commonFish.name, emoji: commonFish.emoji, catSatiety: 15, catIntimacy: 2, catMood: 0, playerMood: 2, fishIds: [commonFish.id] },
+    shrimp && { id: "shrimp", label: shrimp.name, emoji: shrimp.emoji, catSatiety: 10, catIntimacy: 2, catMood: 0, playerMood: 2, fishIds: [shrimp.id] },
+    rareFish && { id: "rare-fish", label: rareFish.name, emoji: rareFish.emoji, catSatiety: 20, catIntimacy: 3, catMood: 4, playerMood: 3, fishIds: [rareFish.id] },
+    (state.inventory.cannedFood ?? 0) > 0 && { id: "canned-food", label: itemNames.cannedFood, emoji: itemEmoji.cannedFood, catSatiety: 25, catIntimacy: 4, catMood: 2, playerMood: 2, itemId: "cannedFood" as ItemId },
+    (state.inventory.fishSoup ?? 0) > 0 && { id: "fish-soup", label: itemNames.fishSoup, emoji: itemEmoji.fishSoup, catSatiety: 20, catIntimacy: 2, catMood: 5, playerMood: 2, itemId: "fishSoup" as ItemId },
+    (state.inventory.grilledFish ?? 0) > 0 && { id: "grilled-fish", label: itemNames.grilledFish, emoji: itemEmoji.grilledFish, catSatiety: 20, catIntimacy: 2, catMood: 5, playerMood: 2, itemId: "grilledFish" as ItemId },
+  ].filter(Boolean) as CatFeedOption[];
 }
 
 function weightedRarity(state: GameState): FishRarity {
@@ -288,8 +324,10 @@ export function getSurvivalInfo(state: GameState) {
   return { phase, nextDisasterIn, danger, hungerState, moodState, boatState };
 }
 
-export function startGame(talent: TalentId): GameState {
-  const state = createInitialState();
+export function startGame(talent: TalentId, catType: CatType = "black"): GameState {
+  const cat = createCatState(catType);
+  const baseState = createInitialState();
+  const state = { ...baseState, cat, mood: clamp(baseState.mood + (cat.type === "black" ? 3 : 0)) };
   return addLog({ ...state, started: true, talent, tradePrices: createLegacyPrices(), fishPrices: createFishPrices(), shopStock: createShopStock(1) }, "event", "潮汐系统", "潮汐系统启动，今天的漂流生活开始了。", [], true);
 }
 
@@ -304,6 +342,11 @@ export function fish(state: GameState): GameState {
 
   if (result.isNew) {
     next = addLog(next, "discovery", "新发现", `首次钓到「${caught.name}」！已加入钓鱼图鉴。`, [caught.rarity], true, true);
+  }
+
+  if (state.cat?.type === "cow" && Math.random() < 0.2) {
+    next = updateCat({ ...next, mood: clamp(next.mood + 1) }, { todayEvent: `${state.cat.name} 看见鱼篓晃了晃尾巴。` });
+    next = addLog(next, "event", "猫猫伙伴", `${state.cat.emoji} ${state.cat.name} 对今天的鱼获很满意，你的 Mood +1。`, ["Mood +1"]);
   }
 
   return next;
@@ -538,6 +581,46 @@ export function noteNoFood(state: GameState): GameState {
   return addLog(state, "warning", "进食", "你翻了翻背包，但没有可以吃的东西。");
 }
 
+export function feedCat(state: GameState, optionId: string): GameState {
+  const option = getCatFeedOptions(state).find((item) => item.id === optionId);
+  const cat = state.cat ?? createCatState("black");
+  if (!option) return addLog(state, "warning", "猫猫", `${cat.name} 眨了眨眼，但背包里没有适合喂它的食物。`);
+
+  let next = state;
+  if (option.itemId) {
+    if ((next.inventory[option.itemId] ?? 0) <= 0) return addLog(next, "warning", "猫猫", `${cat.name} 想吃 ${option.label}，但背包里已经没有了。`);
+    next = addItem(next, option.itemId, -1);
+  } else if (option.fishIds?.length) {
+    const fishId = option.fishIds[0];
+    const entry = next.fishCollection[fishId];
+    if (!entry || entry.count <= 0) return addLog(next, "warning", "猫猫", `${cat.name} 嗅了嗅鱼篓，但没有找到 ${option.label}。`);
+    next = {
+      ...next,
+      fishCollection: {
+        ...next.fishCollection,
+        [fishId]: { ...entry, count: entry.count - 1 },
+      },
+    };
+  }
+
+  const orangeBonus = cat.type === "orange" ? 1 : 0;
+  next = updateCat({ ...next, mood: clamp(next.mood + option.playerMood) }, {
+    satiety: cat.satiety + option.catSatiety + (cat.type === "orange" ? 5 : 0),
+    intimacy: cat.intimacy + option.catIntimacy + orangeBonus,
+    mood: cat.mood + option.catMood + orangeBonus,
+    todayEvent: `${cat.name} 刚刚吃了 ${option.label}，看起来很满足。`,
+  });
+
+  return addLog(
+    next,
+    "event",
+    "猫猫伙伴",
+    `${cat.emoji} ${cat.name} 吃掉了 ${option.label} x1。猫猫饱腹 +${option.catSatiety}${cat.type === "orange" ? "，橘猫加成 +5" : ""}，亲密度 +${option.catIntimacy + orangeBonus}。你的心情 +${option.playerMood}。`,
+    [`${option.label} x1`, `猫饱腹 +${option.catSatiety}`, `亲密 +${option.catIntimacy + orangeBonus}`, `Mood +${option.playerMood}`],
+    true,
+  );
+}
+
 export function upgradeBoat(state: GameState): GameState {
   if (state.boatLevel >= 4) return addLog(state, "warning", "最高等级", "你的海上小商铺已经是 Demo 里的最高等级了。");
 
@@ -579,6 +662,55 @@ export function decorate(state: GameState): GameState {
   return addLog({ ...next, furniture: [...next.furniture, furniture], mood: clamp(next.mood + 10) }, "furniture", "布置家具", `你布置了「${furniture}」，小屋更有生活感了。`, [furniture, "Mood +10"]);
 }
 
+function applyCatDay(state: GameState, stormy: boolean): GameState {
+  const cat = state.cat ?? createCatState("black");
+  let next = updateCat(state, {
+    satiety: cat.satiety - 8,
+    mood: cat.mood + (cat.satiety < 20 ? -8 : cat.mood > 70 ? 1 : 0),
+    todayEvent: `${cat.name} 跟着木筏轻轻晃了一整天。`,
+  });
+  const currentCat = next.cat;
+
+  if (stormy) {
+    const loss = currentCat.intimacy >= 50 ? 2 : 5;
+    next = updateCat(next, { mood: currentCat.mood - loss, todayEvent: `${currentCat.name} 被坏天气吓了一小跳。` });
+    next = addLog(next, "event", "猫猫伙伴", `${currentCat.emoji} ${currentCat.name} 在坏天气里有点害怕，猫猫心情 -${loss}。`, [`猫心情 -${loss}`]);
+  } else if (currentCat.mood > 70 && currentCat.satiety >= 20) {
+    next = updateCat({ ...next, mood: clamp(next.mood + 1) }, { todayEvent: `${currentCat.name} 趴在你旁边睡着了。` });
+    next = addLog(next, "event", "猫猫伙伴", `${currentCat.emoji} ${currentCat.name} 趴在你旁边睡觉，你的 Mood +1。`, ["Mood +1"]);
+  }
+
+  const catAfterMood = next.cat;
+  if (catAfterMood.intimacy > 50 && Math.random() < 0.22) {
+    const found = pick([
+      ["wood", 1, "猫帮忙发现木板 x1"],
+      ["rope", 1, "猫从补给箱旁边扒拉出绳子 x1"],
+      ["coins", 3, "猫叼来 3 贝壳币"],
+    ] as const);
+    if (found[0] === "coins") next = { ...next, coins: next.coins + found[1] };
+    else next = addItem(next, found[0], found[1]);
+    next = updateCat(next, { todayEvent: found[2] });
+    next = addLog(next, "event", "猫猫伙伴", `${catAfterMood.emoji} ${catAfterMood.name} ${found[2]}。`, [found[0] === "coins" ? "+3 贝壳币" : `${itemNames[found[0]]} x${found[1]}`], true);
+  } else if (catAfterMood.type === "calico" && Math.random() < 0.18) {
+    next = addItem(next, "plastic", 1);
+    next = updateCat(next, { todayEvent: `${catAfterMood.name} 翻背包时找到了塑料 x1。` });
+    next = addLog(next, "event", "猫猫伙伴", `${catAfterMood.emoji} ${catAfterMood.name} 好奇地翻背包，找到了 ${itemNames.plastic} x1。`, [`${itemNames.plastic} x1`]);
+  } else if (catAfterMood.type === "black" && Math.random() < 0.12) {
+    next = updateCat(next, { todayEvent: `${catAfterMood.name} 半夜巡逻，认真盯着海面。` });
+    next = addLog(next, "event", "猫猫伙伴", `${catAfterMood.emoji} ${catAfterMood.name} 半夜巡逻，帮你提前发现了漂流瓶的方向。`, []);
+  } else if (Math.random() < 0.18) {
+    next = updateCat(next, { todayEvent: `${catAfterMood.name} 盯着海面看了很久，什么都没发生，但它很认真。` });
+    next = addLog(next, "event", "猫猫伙伴", `${catAfterMood.emoji} ${catAfterMood.name} 盯着海面看了很久，什么都没发生，但它很认真。`, []);
+  }
+
+  if (next.cat.satiety < 20) {
+    next = updateCat(next, { mood: next.cat.mood - 5, todayEvent: `${next.cat.name} 肚子有点空，今天不太想玩。` });
+    next = addLog(next, "warning", "猫猫伙伴", `${next.cat.emoji} ${next.cat.name} 有点饿了，猫猫心情 -5。`, ["猫心情 -5"]);
+  }
+
+  return next;
+}
+
 export function endDay(state: GameState): GameState {
   if (state.gameOverReason) return state;
   const info = getSurvivalInfo(state);
@@ -618,6 +750,8 @@ export function endDay(state: GameState): GameState {
     next = addLog({ ...next, boatHp: Math.max(0, next.boatHp - damage) }, "warning", "暴雨", `暴雨拍打木筏，Boat HP -${damage}。`, [`Boat HP -${damage}`]);
   }
 
+  next = applyCatDay(next, disasterWeather.includes(nextWeather));
+
   const event = Math.random();
   if (event < 0.18) next = addLog(next, "event", "漂流瓶", "你发现漂流瓶，里面竟然有 20 贝壳币。", ["+20 贝壳币"]);
   else if (event < 0.54) next = addLog(addItem(next, "commonCrate", 1), "event", "友好商船", "遇到友好商船，获得普通补给包。", ["普通补给包 x1"]);
@@ -631,12 +765,29 @@ export function endDay(state: GameState): GameState {
   return addLog(next, "event", "新的一天", `第 ${next.day} 天来了，天气是${next.weather}，鱼价已刷新。`, [], false);
 }
 
+function migrateCat(rawCat: Partial<CatState> | undefined): CatState {
+  const fallback = createCatState(rawCat?.type ?? "black");
+  return {
+    ...fallback,
+    ...rawCat,
+    type: rawCat?.type ?? fallback.type,
+    name: rawCat?.name || fallback.name,
+    breed: rawCat?.breed || fallback.breed,
+    emoji: rawCat?.emoji || fallback.emoji,
+    intimacy: clamp(rawCat?.intimacy ?? fallback.intimacy),
+    satiety: clamp(rawCat?.satiety ?? fallback.satiety),
+    mood: clamp(rawCat?.mood ?? fallback.mood),
+    todayEvent: rawCat?.todayEvent ?? fallback.todayEvent,
+  };
+}
+
 function migrateState(raw: Partial<GameState>): GameState {
   const initial = createInitialState();
   const fishCollection = { ...createFishCollection(), ...(raw.fishCollection ?? {}) };
   const fishPrices = { ...createBaseFishPrices(), ...(raw.fishPrices ?? {}) };
   const inventory = { ...initial.inventory, ...(raw.inventory ?? {}) };
   const shopStock = raw.shopStock?.length ? raw.shopStock : createShopStock(raw.day ?? 1);
+  const cat = migrateCat(raw.cat);
   const logs = Array.isArray(raw.logs)
     ? raw.logs
         .filter((log) => typeof log === "object" && log)
@@ -653,7 +804,7 @@ function migrateState(raw: Partial<GameState>): GameState {
         )
     : initial.logs;
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, logs };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs };
 }
 
 function readSavedPayload(): { state: GameState; savedAt?: string } | undefined {

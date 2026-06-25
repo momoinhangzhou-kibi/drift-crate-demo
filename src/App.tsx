@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { boatNames, fishList, foodItems, itemEmoji, itemMeta, itemNames, recipes, talents } from "./game/data";
+import { boatNames, catOptions, fishList, foodItems, itemEmoji, itemMeta, itemNames, recipes, talents } from "./game/data";
 import {
   buyShopItem,
   canCookAnyRecipe,
@@ -8,7 +8,9 @@ import {
   decorate,
   endDay,
   eatFood,
+  feedCat,
   fish,
+  getCatFeedOptions,
   getRecipeStatus,
   getMissingRequirements,
   getUpgradeCost,
@@ -30,7 +32,7 @@ import {
   upgradeBoat,
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
-import { Fish, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Recipe, ShopItem, TalentId } from "./game/types";
+import { CatFeedOption, CatType, Fish, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
   "wood",
@@ -49,7 +51,25 @@ const materialOrder: ItemId[] = [
 const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot"];
 const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
 
-type ViewState = "title" | "talentSelect" | "playing" | "loadMenu";
+type ViewState = "title" | "talentSelect" | "catSelect" | "playing" | "loadMenu";
+type FeedbackRarity = Rarity | FishRarity | "Uncommon";
+type FeedbackLine = {
+  label: string;
+  amount?: number;
+  rarity?: FeedbackRarity;
+};
+type FeedbackData = {
+  title: string;
+  icon: string;
+  message?: string;
+  gains: FeedbackLine[];
+  costs: FeedbackLine[];
+  stats: FeedbackLine[];
+  warnings: string[];
+  notes: string[];
+  rarity?: FeedbackRarity;
+  important?: boolean;
+};
 
 const logIcon: Record<LogType, string> = {
   fishing: "🎣",
@@ -72,11 +92,14 @@ function App() {
   const [showCooking, setShowCooking] = useState(false);
   const [showEating, setShowEating] = useState(false);
   const [showSelling, setShowSelling] = useState(false);
+  const [showCat, setShowCat] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
   const [musicOn, setMusicOn] = useState(false);
+  const [pendingTalent, setPendingTalent] = useState<TalentId | undefined>();
   const [inventoryFilter, setInventoryFilter] = useState<ItemCategory | "all">("all");
   const [sellFocusFishId, setSellFocusFishId] = useState<string | undefined>();
   const [recentExpanded, setRecentExpanded] = useState(false);
+  const [feedback, setFeedback] = useState<FeedbackData | undefined>();
   const logPanelRef = useRef<HTMLElement | null>(null);
   const selectedTalent = talents.find((talent) => talent.id === state.talent);
   const upgradeCost = useMemo(() => getUpgradeCost(state), [state]);
@@ -118,16 +141,27 @@ function App() {
   }, [musicOn]);
 
   const update = (next: GameState) => setState(next);
+  const applyAction = (title: string, next: GameState) => {
+    setFeedback(buildFeedback(title, state, next));
+    setState(next);
+  };
 
   const refreshSaveSummary = () => setSaveSummary(getSaveSummary());
 
   const startNewGameFlow = () => {
     if (hasSavedGame() && !window.confirm("已经存在存档。开始新游戏不会立刻删除旧存档，但下次保存会覆盖当前进度。是否继续？")) return;
+    setPendingTalent(undefined);
     setView("talentSelect");
   };
 
   const chooseTalent = (talent: TalentId) => {
-    setState(startGame(talent));
+    setPendingTalent(talent);
+    setView("catSelect");
+  };
+
+  const chooseCat = (catType: CatType) => {
+    setState(startGame(pendingTalent ?? "fishing", catType));
+    setPendingTalent(undefined);
     setShowTutorial(true);
     setView("playing");
   };
@@ -157,19 +191,20 @@ function App() {
     setShowCrate(false);
     setShowCooking(false);
     setShowEating(false);
+    setShowCat(false);
+    setFeedback(undefined);
     update(resetGame());
     refreshSaveSummary();
     setView("title");
   };
 
   const openCrateAndShow = (crate: "commonCrate" | "premiumCrate") => {
-    update(openCrate(state, crate));
-    setShowCrate(true);
+    applyAction(crate === "premiumCrate" ? "打开高级补给包" : "打开普通补给包", openCrate(state, crate));
   };
 
   const openEatingPanel = () => {
     if (!hasEdibleFood(state)) {
-      update(noteNoFood(state));
+      applyAction("进食", noteNoFood(state));
       return;
     }
     setShowEating(true);
@@ -184,7 +219,7 @@ function App() {
         title: "海上交易",
         message: "你翻了翻鱼篓，暂时没有可以出售的鱼。",
       };
-      update({
+      applyAction("出售鱼获", {
         ...state,
         logs: [emptyTradeLog, ...state.logs].slice(0, 30),
       });
@@ -216,6 +251,10 @@ function App() {
         onLoad={loadSavedGame}
       />
     );
+  }
+
+  if (view === "catSelect") {
+    return <CatSelectScreen onBack={() => setView("talentSelect")} onChoose={chooseCat} />;
   }
 
   if (view === "talentSelect" || !state.started) {
@@ -286,6 +325,10 @@ function App() {
                 <div className="boat-roof">{state.boatLevel >= 4 ? "🏪✨" : state.boatLevel >= 3 ? "🏠🪟" : state.boatLevel === 2 ? "⛵🚩" : "🪵📦"}</div>
                 <div className="boat-body">{boatNames[state.boatLevel]}</div>
                 <div className="furniture-strip">{state.furniture.slice(0, 6).map((item) => <span key={item}>{furnitureIcon(item)}</span>)}</div>
+                <div className="stage-cat" title={`${state.cat.name} / ${state.cat.breed}`}>
+                  <span>{state.cat.emoji}</span>
+                  <small>{state.cat.name}</small>
+                </div>
                 <div className="waves">≈≈≈≈≈≈≈≈≈≈≈</div>
               </div>
             </div>
@@ -301,28 +344,29 @@ function App() {
           </section>
 
           <section className="actions panel action-dock">
-            <ActionButton onClick={() => update(fish(state))}>🎣 钓鱼</ActionButton>
-            <ActionButton onClick={() => update(salvage(state))}>🪝 打捞</ActionButton>
+            <ActionButton onClick={() => applyAction("钓鱼", fish(state))}>🎣 钓鱼</ActionButton>
+            <ActionButton onClick={() => applyAction("打捞", salvage(state))}>🪝 打捞</ActionButton>
             <ActionButton badge={state.inventory.commonCrate > 0 ? "可开" : undefined} onClick={() => openCrateAndShow("commonCrate")}>
               🎁 开普通包 x{state.inventory.commonCrate}
             </ActionButton>
             <ActionButton badge={state.inventory.premiumCrate > 0 ? "可开" : undefined} onClick={() => openCrateAndShow("premiumCrate")}>
               💝 开高级包 x{state.inventory.premiumCrate}
             </ActionButton>
-            <ActionButton badge={readyToUpgrade ? "可升级" : undefined} onClick={() => update(upgradeBoat(state))}>
+            <ActionButton badge={readyToUpgrade ? "可升级" : undefined} onClick={() => applyAction("升级载具", upgradeBoat(state))}>
               🔨 升级载具
             </ActionButton>
-            <ActionButton onClick={() => update(repairBoat(state))}>🧰 修理载具</ActionButton>
+            <ActionButton onClick={() => applyAction("修理载具", repairBoat(state))}>🧰 修理载具</ActionButton>
             <ActionButton badge={readyToCook ? "可做" : undefined} onClick={() => setShowCooking(true)}>
               🍲 制作料理
             </ActionButton>
             <ActionButton badge={readyToEat ? "可吃" : undefined} onClick={openEatingPanel}>
               🍽 进食
             </ActionButton>
-            <ActionButton badge={readyToDecorate ? "可布置" : undefined} onClick={() => update(decorate(state))}>
+            <ActionButton onClick={() => setShowCat(true)}>🐈 猫猫</ActionButton>
+            <ActionButton badge={readyToDecorate ? "可布置" : undefined} onClick={() => applyAction("布置家具", decorate(state))}>
               🪑 布置家具
             </ActionButton>
-            <ActionButton className="night" onClick={() => update(endDay(state))}>🌙 结束一天</ActionButton>
+            <ActionButton className="night" onClick={() => applyAction("结束一天", endDay(state))}>🌙 结束一天</ActionButton>
           </section>
 
           <section className="panel trade-panel">
@@ -336,7 +380,7 @@ function App() {
                 <FishTradeCard key={fishItem.id} fish={fishItem} state={state} onSell={() => openSellPanel(fishItem.id)} />
               ))}
             </div>
-            <TideShop state={state} onBuy={(item) => window.confirm(`购买 ${itemNames[item.id]}，花费 ${item.price} 贝壳币？`) && update(buyShopItem(state, item.id))} />
+            <TideShop state={state} onBuy={(item) => window.confirm(`购买 ${itemNames[item.id]}，花费 ${item.price} 贝壳币？`) && applyAction("购买", buyShopItem(state, item.id))} />
           </section>
 
           <section className="panel fishdex-panel">
@@ -441,7 +485,7 @@ function App() {
           state={state}
           onClose={() => setShowCooking(false)}
           onCook={(recipeId) => {
-            update(cookRecipe(state, recipeId));
+            applyAction("制作料理", cookRecipe(state, recipeId));
           }}
         />
       )}
@@ -450,7 +494,7 @@ function App() {
           state={state}
           onClose={() => setShowEating(false)}
           onEat={(foodId) => {
-            update(eatFood(state, foodId));
+            applyAction("进食", eatFood(state, foodId));
           }}
         />
       )}
@@ -463,14 +507,193 @@ function App() {
             setSellFocusFishId(undefined);
           }}
           onSell={(selections) => {
-            update(sellSelectedFish(state, selections));
+            applyAction("出售鱼获", sellSelectedFish(state, selections));
             setShowSelling(false);
             setSellFocusFishId(undefined);
           }}
         />
       )}
+      {showCat && (
+        <CatModal
+          state={state}
+          onClose={() => setShowCat(false)}
+          onFeed={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
+        />
+      )}
       {showTutorial && <TutorialModal onClose={(never) => { setShowTutorial(false); if (never) update({ ...state, tutorialSeen: true }); }} />}
+      {feedback && <FeedbackModal feedback={feedback} onClose={() => setFeedback(undefined)} />}
     </main>
+  );
+}
+
+function buildFeedback(title: string, before: GameState, after: GameState): FeedbackData {
+  const previousLogIds = new Set(before.logs.map((log) => log.id));
+  const newLogs = after.logs.filter((log) => !previousLogIds.has(log.id));
+  const primaryLog = newLogs[0];
+  const gains: FeedbackLine[] = [];
+  const costs: FeedbackLine[] = [];
+  const stats: FeedbackLine[] = [];
+  const warnings = newLogs.filter((log) => log.type === "warning").map((log) => log.message);
+  const notes = newLogs
+    .filter((log) => log.type !== "warning" && (log.isNew || log.important))
+    .map((log) => log.message);
+
+  (Object.keys(itemNames) as ItemId[]).forEach((id) => {
+    const diff = (after.inventory[id] ?? 0) - (before.inventory[id] ?? 0);
+    if (diff > 0) gains.push({ label: `${itemEmoji[id]} ${itemNames[id]}`, amount: diff, rarity: itemMeta[id]?.rarity });
+    if (diff < 0) costs.push({ label: `${itemEmoji[id]} ${itemNames[id]}`, amount: Math.abs(diff), rarity: itemMeta[id]?.rarity });
+  });
+
+  fishList.forEach((fishItem) => {
+    const beforeCount = before.fishCollection[fishItem.id]?.count ?? 0;
+    const afterCount = after.fishCollection[fishItem.id]?.count ?? 0;
+    const diff = afterCount - beforeCount;
+    if (diff > 0) gains.push({ label: `${fishItem.emoji} ${fishItem.name}`, amount: diff, rarity: fishItem.rarity });
+    if (diff < 0) costs.push({ label: `${fishItem.emoji} ${fishItem.name}`, amount: Math.abs(diff), rarity: fishItem.rarity });
+  });
+
+  addArrayDiff(before.equipment, after.equipment, "装备", gains, costs);
+  addArrayDiff(before.furniture, after.furniture, "家具", gains, costs);
+  addNumberDiff("🐚 贝壳币", before.coins, after.coins, stats);
+  addNumberDiff("🍗 Hunger", before.hunger, after.hunger, stats);
+  addNumberDiff("😊 Mood", before.mood, after.mood, stats);
+  addNumberDiff("🛶 Boat HP", before.boatHp, after.boatHp, stats);
+  addNumberDiff("📅 Day", before.day, after.day, stats);
+  addNumberDiff("🐈 猫饱腹", before.cat?.satiety ?? 0, after.cat?.satiety ?? 0, stats);
+  addNumberDiff("🐾 猫亲密", before.cat?.intimacy ?? 0, after.cat?.intimacy ?? 0, stats);
+  addNumberDiff("😺 猫心情", before.cat?.mood ?? 0, after.cat?.mood ?? 0, stats);
+  if (before.boatLevel !== after.boatLevel) {
+    stats.push({ label: `🚤 Boat Lv ${before.boatLevel} → ${after.boatLevel}` });
+  }
+
+  if (!gains.length && !costs.length && !stats.length && primaryLog?.type !== "warning" && primaryLog?.message) {
+    notes.push(primaryLog.message);
+  }
+
+  const rarity = strongestFeedbackRarity(gains.concat(costs), newLogs);
+
+  return {
+    title,
+    icon: primaryLog ? feedbackIcon(primaryLog.type) : "✨",
+    message: primaryLog?.message,
+    gains,
+    costs,
+    stats,
+    warnings,
+    notes: Array.from(new Set(notes)),
+    rarity,
+    important: newLogs.some((log) => log.important || log.isNew) || rarity === "Epic" || rarity === "Legendary",
+  };
+}
+
+function addNumberDiff(label: string, beforeValue: number, afterValue: number, stats: FeedbackLine[]) {
+  const diff = afterValue - beforeValue;
+  if (diff === 0) return;
+  stats.push({ label: `${label} ${diff > 0 ? "+" : ""}${diff}` });
+}
+
+function addArrayDiff(beforeItems: string[], afterItems: string[], group: string, gains: FeedbackLine[], costs: FeedbackLine[]) {
+  const beforeCounts = countStrings(beforeItems);
+  const afterCounts = countStrings(afterItems);
+  const names = new Set([...Object.keys(beforeCounts), ...Object.keys(afterCounts)]);
+  names.forEach((name) => {
+    const diff = (afterCounts[name] ?? 0) - (beforeCounts[name] ?? 0);
+    if (diff > 0) gains.push({ label: `${group}：${name}`, amount: diff });
+    if (diff < 0) costs.push({ label: `${group}：${name}`, amount: Math.abs(diff) });
+  });
+}
+
+function countStrings(items: string[]) {
+  return items.reduce<Record<string, number>>((counts, item) => {
+    counts[item] = (counts[item] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
+function strongestFeedbackRarity(lines: FeedbackLine[], logs: LogEntry[]): FeedbackRarity | undefined {
+  const rank: Record<string, number> = { Common: 1, Uncommon: 2, Rare: 3, Epic: 4, Legendary: 5 };
+  const candidates: FeedbackRarity[] = [];
+  lines.forEach((line) => {
+    if (line.rarity) candidates.push(line.rarity);
+  });
+  logs.forEach((log) => {
+    const source = `${log.title} ${log.message} ${(log.rewards ?? []).join(" ")}`;
+    if (source.includes("Legendary")) candidates.push("Legendary");
+    else if (source.includes("Epic")) candidates.push("Epic");
+    else if (source.includes("Rare")) candidates.push("Rare");
+  });
+  return candidates.sort((a, b) => (rank[b] ?? 0) - (rank[a] ?? 0))[0];
+}
+
+function feedbackIcon(type: LogType) {
+  const icons: Record<LogType, string> = {
+    fishing: "🎣",
+    salvage: "🪝",
+    crate: "🎁",
+    trade: "🛒",
+    cooking: "🍳",
+    upgrade: "🔨",
+    furniture: "🪑",
+    event: "🌊",
+    warning: "⚠️",
+    discovery: "✨",
+  };
+  return icons[type];
+}
+
+function FeedbackModal({ feedback, onClose }: { feedback: FeedbackData; onClose: () => void }) {
+  const rarityClass = feedback.rarity ? `feedback-rarity-${feedback.rarity.toLowerCase()}` : "";
+  const hasBody = feedback.gains.length || feedback.costs.length || feedback.stats.length || feedback.warnings.length || feedback.notes.length;
+
+  return (
+    <div className="modal-backdrop feedback-backdrop" onClick={onClose}>
+      <section className={`feedback-modal ${rarityClass} ${feedback.important ? "important" : ""}`} onClick={(event) => event.stopPropagation()}>
+        <div className="feedback-header">
+          <span className="feedback-emoji">{feedback.icon}</span>
+          <div>
+            <p className="eyebrow">Action Result</p>
+            <h2>{feedback.title}</h2>
+          </div>
+        </div>
+        {feedback.message && <p className="feedback-message">{feedback.message}</p>}
+        {hasBody ? (
+          <div className="feedback-sections">
+            <FeedbackSection title="获得物品" tone="gain" lines={feedback.gains} />
+            <FeedbackSection title="消耗物品" tone="cost" lines={feedback.costs} />
+            <FeedbackSection title="数值变化" tone="stat" lines={feedback.stats} />
+            {!!feedback.warnings.length && (
+              <div className="feedback-section feedback-warning">
+                <strong>特殊提示 / 失败原因</strong>
+                {feedback.warnings.map((warning) => <span key={warning}>⚠️ {warning}</span>)}
+              </div>
+            )}
+            {!!feedback.notes.length && (
+              <div className="feedback-section feedback-note">
+                <strong>特殊提示</strong>
+                {feedback.notes.map((note) => <span key={note}>✨ {note}</span>)}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="feedback-empty">这次没有明显变化，但漂流日记已经记录下来。</p>
+        )}
+        <button className="primary-action feedback-confirm" onClick={onClose}>确定</button>
+      </section>
+    </div>
+  );
+}
+
+function FeedbackSection({ title, tone, lines }: { title: string; tone: "gain" | "cost" | "stat"; lines: FeedbackLine[] }) {
+  if (!lines.length) return null;
+  return (
+    <div className={`feedback-section feedback-${tone}`}>
+      <strong>{title}</strong>
+      {lines.map((line) => (
+        <span className={line.rarity ? `feedback-line-rarity-${line.rarity.toLowerCase()}` : ""} key={`${title}-${line.label}-${line.amount ?? ""}`}>
+          {line.label}{line.amount ? ` ×${line.amount}` : ""}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -479,12 +702,10 @@ function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadM
   const info = getSurvivalInfo(snapshot);
   return (
     <main className="title-screen">
-      <div className="title-sky" aria-hidden="true">
-        <span className="title-sun">☀️</span><span className="cloud cloud-a">☁️</span><span className="cloud cloud-b">☁️</span>
-        <span className="gull gull-a">⌁</span><span className="gull gull-b">⌁</span><span className="far-boat">⛵</span>
-      </div>
+      <img className="title-cover-image" src="/assets/title-bg.png" alt="漂流补给箱标题封面" />
+      <div className="title-cover-vignette" aria-hidden="true"></div>
       <section className="title-menu-card">
-        <div className="version-pill">当前版本 v0.4.0</div>
+        <div className="version-pill">当前版本 v0.4.1</div>
         <div className="title-logo">
           <p className="eyebrow">DRIFT CRATE</p>
           <h1>漂流补给箱</h1>
@@ -494,47 +715,11 @@ function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadM
           <button className="title-main-button" onClick={onNewGame}>▶ 开始新游戏</button>
           <button disabled={!saveSummary.exists && !hasActiveRun} onClick={onContinue}>📂 {hasActiveRun ? "返回游戏" : "继续游戏"}</button>
           <button onClick={onLoadMenu}>💾 读取存档</button>
-          <button onClick={onContinue}>🏆 图鉴</button>
+          <button onClick={onContinue}>📘 图鉴</button>
           <button onClick={onToggleMusic}>🎵 音乐 {musicOn ? "开" : "关"}</button>
           <button onClick={onToggleMusic}>⚙ 设置</button>
         </div>
         <SaveSummaryCard saveSummary={saveSummary} />
-      </section>
-      <section className="sea-base" aria-label="漂流补给站主视觉">
-        <div className="illustration-card">
-          <div className="base-sunbeam"></div>
-          <div className="seagull-shape gull-left"></div>
-          <div className="seagull-shape gull-right"></div>
-          <div className="base-platform">
-            <div className="platform-plank p1"></div>
-            <div className="platform-plank p2"></div>
-            <div className="platform-plank p3"></div>
-            <div className="platform-plank p4"></div>
-            <div className="rope-front"></div>
-            <div className="float float-a"></div>
-            <div className="float float-b"></div>
-            <div className="string-lights"><i></i><i></i><i></i><i></i><i></i></div>
-            <div className="shop-post post-a"></div>
-            <div className="shop-post post-b"></div>
-            <div className="base-roof"></div>
-            <div className="base-house">
-              <div className="shop-sign">补给站</div>
-              <div className="door"></div>
-              <div className="window"></div>
-              <div className="lifebuoy-ring"></div>
-            </div>
-            <div className="flagpole"><span></span></div>
-            <div className="fishing-rod"></div>
-            <div className="crate-stack"><b></b><b></b></div>
-            <div className="mini-fridge"></div>
-            <div className="tiny-table"></div>
-            <div className="plant-pot"></div>
-            <div className="shell-dot shell-a"></div>
-            <div className="shell-dot shell-b"></div>
-            <div className="bottle-prop"></div>
-            <div className="chalk-board">今日<br />补给</div>
-          </div>
-        </div>
       </section>
       <section className="title-status-bar">
         <Status label="Day" value={snapshot.day} /><Status label="Boat Lv" value={`Lv.${snapshot.boatLevel}`} />
@@ -542,7 +727,6 @@ function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadM
         <Status label="Mood" value={snapshot.mood} /><Status label="天气" value={snapshot.weather} />
         <Status label="阶段" value={info.phase} /><Status label="下次风暴" value={`${info.nextDisasterIn}天`} danger={info.nextDisasterIn <= 2 && snapshot.day >= 8} />
       </section>
-      <div className="title-waves" aria-hidden="true">≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈</div>
     </main>
   );
 }
@@ -568,6 +752,76 @@ function LoadScreen({ saveSummary, onBack, onLoad }: { saveSummary: SaveSummary;
         <button className="compact-button menu-back" onClick={onBack}>返回主菜单</button>
       </section>
     </main>
+  );
+}
+
+function CatSelectScreen({ onBack, onChoose }: { onBack: () => void; onChoose: (catType: CatType) => void }) {
+  return (
+    <main className="start-screen">
+      <section className="start-card">
+        <p className="eyebrow">Cat Companion</p>
+        <h1>选择猫猫伙伴</h1>
+        <p className="intro">猫猫不会战斗，只会陪你在海上生活。黑猫 kibi 是推荐默认伙伴。</p>
+        <div className="cat-select-grid">
+          {catOptions.map((cat) => (
+            <button className={`cat-choice-card ${cat.recommended ? "recommended" : ""}`} key={cat.type} onClick={() => onChoose(cat.type)}>
+              {cat.recommended && <span className="item-badge">推荐</span>}
+              <span className="cat-choice-emoji">{cat.emoji}</span>
+              <strong>{cat.defaultName}</strong>
+              <small>{cat.breed}</small>
+              <p>{cat.personality}</p>
+              <em>{cat.bonus}</em>
+            </button>
+          ))}
+        </div>
+        <button className="compact-button menu-back" onClick={onBack}>返回天赋选择</button>
+      </section>
+    </main>
+  );
+}
+
+function CatModal({ state, onClose, onFeed }: { state: GameState; onClose: () => void; onFeed: (optionId: string) => void }) {
+  const options = getCatFeedOptions(state);
+  const cat = state.cat;
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="wide-modal cat-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Cat Companion</p>
+            <h2>{cat.emoji} {cat.name}</h2>
+          </div>
+          <button className="compact-button" onClick={onClose}>关闭</button>
+        </div>
+        <div className="cat-status-card">
+          <span className="cat-big-emoji">{cat.emoji}</span>
+          <div>
+            <strong>{cat.name} / {cat.breed}</strong>
+            <p>{cat.todayEvent ?? "猫猫正安静地待在木筏旁边。"}</p>
+          </div>
+        </div>
+        <div className="cat-stat-grid">
+          <Status label="亲密度" value={cat.intimacy} />
+          <Status label="饱腹度" value={cat.satiety} danger={cat.satiety < 20} />
+          <Status label="猫心情" value={cat.mood} />
+        </div>
+        <h3>喂猫</h3>
+        {options.length ? (
+          <div className="cat-feed-list">
+            {options.map((option: CatFeedOption) => (
+              <button key={option.id} onClick={() => onFeed(option.id)}>
+                <span>{option.emoji}</span>
+                <strong>{option.label}</strong>
+                <small>饱腹 +{option.catSatiety} / 亲密 +{option.catIntimacy} / Mood +{option.playerMood}</small>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="hint">背包里暂时没有适合喂猫的食物。</p>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -997,7 +1251,7 @@ function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameStat
         {food && <span>进食效果：Hunger +{food.hunger} / Mood +{food.mood}</span>}
       </div>
       <p className={status.canCook ? "ready" : "hint"}>{status.canCook ? "材料齐了，可以制作。" : `还缺：${status.missing.join("、")}`}</p>
-      <button className={status.canCook ? "primary-action" : ""} disabled={!status.canCook} onClick={onCook}>制作</button>
+      <button className={status.canCook ? "primary-action" : ""} aria-disabled={!status.canCook} onClick={onCook}>制作</button>
     </article>
   );
 }
