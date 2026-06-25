@@ -120,15 +120,17 @@ p {
 .title-logo {
   margin: 1.2rem 0;
   color: #5b3a24;
-  text-shadow: 0 3px 0 rgba(255, 255, 255, 0.75);
+  text-shadow: 0 2px 8px rgba(255, 255, 255, 0.7);
 }
 
 .title-logo h1 {
   margin-bottom: 0.4rem;
-  font-size: clamp(3.1rem, 6vw, 5.2rem);
-  line-height: 0.92;
-  color: #fff7e9;
-  -webkit-text-stroke: 3px #6b4931;
+  font-size: clamp(3rem, 5.5vw, 4.8rem);
+  line-height: 1.02;
+  letter-spacing: 0.04em;
+  color: #fff8ed;
+  -webkit-text-stroke: 1px rgba(107, 73, 49, 0.55);
+  text-shadow: 0 3px 0 rgba(107, 73, 49, 0.28), 0 10px 22px rgba(20, 72, 98, 0.18);
 }
 
 .title-logo p:last-child {

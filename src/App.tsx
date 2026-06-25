@@ -53,6 +53,7 @@ const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", ma
 
 type ViewState = "title" | "talentSelect" | "catSelect" | "playing" | "loadMenu";
 type ModulePanel = "inventory" | "shop" | "dex" | "recipes" | "journal" | "cat" | "home" | "settings";
+type TitlePanel = "dex" | "settings";
 type FeedbackRarity = Rarity | FishRarity | "Uncommon";
 type FeedbackLine = {
   label: string;
@@ -87,6 +88,25 @@ const musicTracks: MusicTrack[] = [
   { id: "ocean-cozy-2", name: "漂流午后", file: "/assets/audio/ocean-cozy-2.mp3", description: "轻松午后感，适合钓鱼和开箱。" },
   { id: "ocean-cozy-3", name: "轻快海浪", file: "/assets/audio/ocean-cozy-3.mp3", description: "更活泼的海浪节奏，适合经营补给站。" },
 ];
+
+const equipmentNames: Record<string, string> = {
+  oldRod: "旧钓鱼竿",
+  sturdyRod: "结实钓鱼竿",
+  advancedRod: "高级钓鱼竿",
+  advancedRodItem: "高级钓鱼竿",
+  goldenRod: "黄金钓鱼竿",
+  waterPurifier: "自动净水器",
+  solarPurifier: "太阳能净水器",
+  fishingNet: "渔网",
+  grill: "烤架",
+  kitchen: "移动海上厨房",
+  shopPermit: "海上便利店许可证",
+  waterproofBackpack: "防水背包",
+};
+
+function displayName(name: string) {
+  return equipmentNames[name] ?? name;
+}
 
 function readMusicSettings() {
   try {
@@ -132,6 +152,7 @@ function App() {
   const [showSelling, setShowSelling] = useState(false);
   const [showCat, setShowCat] = useState(false);
   const [activePanel, setActivePanel] = useState<ModulePanel | undefined>();
+  const [titlePanel, setTitlePanel] = useState<TitlePanel | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
   const [musicOn, setMusicOn] = useState(() => readMusicSettings().on);
   const [musicMode, setMusicMode] = useState<MusicMode>(() => readMusicSettings().mode);
@@ -223,14 +244,16 @@ function App() {
     const audio = audioRef.current;
     if (!audio) return;
     const handleEnded = () => {
-      if (musicMode === "random") playNextTrack();
-      else {
-        audio.currentTime = 0;
-        audio.play().catch((error) => {
-          if (error instanceof DOMException && error.name === "AbortError") return;
-          setMusicError(describeMusicPlayError(error));
-        });
-      }
+      const next = musicMode === "random" ? pickMusicTrack(currentTrackId) : musicTracks.find((track) => track.id === musicMode) ?? musicTracks[0];
+      if (!next) return;
+      setCurrentTrackId(next.id);
+      audio.src = next.file;
+      audio.load();
+      audio.currentTime = 0;
+      audio.play().then(() => setMusicError(undefined)).catch((error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setMusicError(describeMusicPlayError(error));
+      });
     };
     audio.addEventListener("ended", handleEnded);
     return () => audio.removeEventListener("ended", handleEnded);
@@ -275,6 +298,14 @@ function App() {
     setState(loadGameWithLog());
     refreshSaveSummary();
     setView("playing");
+  };
+
+  const openTitleLoad = () => {
+    if (!hasSavedGame()) {
+      window.alert("还没有存档。先开始新游戏，在游戏里保存后就能读取啦。");
+      return;
+    }
+    setView("loadMenu");
   };
 
   const saveCurrentGame = () => {
@@ -335,10 +366,32 @@ function App() {
           hasActiveRun={state.started}
           onNewGame={startNewGameFlow}
           onContinue={continueGame}
-          onLoadMenu={() => setView("loadMenu")}
+          onLoadMenu={openTitleLoad}
+          onDex={() => setTitlePanel("dex")}
+          onSettings={() => setTitlePanel("settings")}
           musicOn={musicOn}
           onToggleMusic={toggleMusic}
         />
+        {titlePanel === "dex" && (
+          <TitleDexPanel state={state.started ? state : loadGame()} completion={completion} onClose={() => setTitlePanel(undefined)} />
+        )}
+        {titlePanel === "settings" && (
+          <TitleSettingsPanel
+            musicOn={musicOn}
+            musicMode={musicMode}
+            currentTrackId={currentTrackId}
+            musicError={musicError}
+            onToggleMusic={toggleMusic}
+            onMusicModeChange={(mode) => {
+              setMusicReady(true);
+              setMusicMode(mode);
+              setCurrentTrackId(mode === "random" ? pickMusicTrack(currentTrackId).id : mode);
+              setMusicError(undefined);
+            }}
+            onNextTrack={playNextTrack}
+            onClose={() => setTitlePanel(undefined)}
+          />
+        )}
       </>
     );
   }
@@ -567,7 +620,7 @@ function App() {
             </div>
             <h3>装备</h3>
             <div className="tag-list">
-              {state.equipment.length ? state.equipment.map((item) => <span key={item}>{item}</span>) : <p>暂无装备。</p>}
+              {state.equipment.length ? state.equipment.map((item) => <span key={item}>{displayName(item)}</span>) : <p>暂无装备。</p>}
             </div>
           </section>
         </aside>
@@ -709,7 +762,7 @@ function buildFeedback(title: string, before: GameState, after: GameState): Feed
     if (diff < 0) costs.push({ label: `${fishItem.emoji} ${fishItem.name}`, amount: Math.abs(diff), rarity: fishItem.rarity });
   });
 
-  addArrayDiff(before.equipment, after.equipment, "装备", gains, costs);
+  addArrayDiff(before.equipment, after.equipment, "装备", gains, costs, displayName);
   addArrayDiff(before.furniture, after.furniture, "家具", gains, costs);
   addNumberDiff("🐚 贝壳币", before.coins, after.coins, stats);
   addNumberDiff("🍗 Hunger", before.hunger, after.hunger, stats);
@@ -751,14 +804,14 @@ function addNumberDiff(label: string, beforeValue: number, afterValue: number, s
   stats.push({ label: `${label} ${diff > 0 ? "+" : ""}${diff}` });
 }
 
-function addArrayDiff(beforeItems: string[], afterItems: string[], group: string, gains: FeedbackLine[], costs: FeedbackLine[]) {
+function addArrayDiff(beforeItems: string[], afterItems: string[], group: string, gains: FeedbackLine[], costs: FeedbackLine[], formatter: (value: string) => string = (value) => value) {
   const beforeCounts = countStrings(beforeItems);
   const afterCounts = countStrings(afterItems);
   const names = new Set([...Object.keys(beforeCounts), ...Object.keys(afterCounts)]);
   names.forEach((name) => {
     const diff = (afterCounts[name] ?? 0) - (beforeCounts[name] ?? 0);
-    if (diff > 0) gains.push({ label: `${group}：${name}`, amount: diff });
-    if (diff < 0) costs.push({ label: `${group}：${name}`, amount: Math.abs(diff) });
+    if (diff > 0) gains.push({ label: `${group}：${formatter(name)}`, amount: diff });
+    if (diff < 0) costs.push({ label: `${group}：${formatter(name)}`, amount: Math.abs(diff) });
   });
 }
 
@@ -980,7 +1033,7 @@ function GameModulePanel({
             </div>
             <h3>装备</h3>
             <div className="tag-list">
-              {state.equipment.length ? state.equipment.map((item) => <span key={item}>{item}</span>) : <p>暂无装备。</p>}
+              {state.equipment.length ? state.equipment.map((item) => <span key={item}>{displayName(item)}</span>) : <p>暂无装备。</p>}
             </div>
           </div>
         )}
@@ -1068,7 +1121,7 @@ function CatPanelContent({ state, onFeed }: { state: GameState; onFeed: (optionI
   );
 }
 
-function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadMenu, musicOn, onToggleMusic }: { saveSummary: SaveSummary; hasActiveRun: boolean; onNewGame: () => void; onContinue: () => void; onLoadMenu: () => void; musicOn: boolean; onToggleMusic: () => void }) {
+function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadMenu, onDex, onSettings, musicOn, onToggleMusic }: { saveSummary: SaveSummary; hasActiveRun: boolean; onNewGame: () => void; onContinue: () => void; onLoadMenu: () => void; onDex: () => void; onSettings: () => void; musicOn: boolean; onToggleMusic: () => void }) {
   const snapshot = loadGame();
   const info = getSurvivalInfo(snapshot);
   return (
@@ -1086,9 +1139,9 @@ function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadM
           <button className="title-main-button" onClick={onNewGame}>▶ 开始新游戏</button>
           <button disabled={!saveSummary.exists && !hasActiveRun} onClick={onContinue}>📂 {hasActiveRun ? "返回游戏" : "继续游戏"}</button>
           <button onClick={onLoadMenu}>💾 读取存档</button>
-          <button onClick={onContinue}>📘 图鉴</button>
+          <button onClick={onDex}>📘 图鉴</button>
           <button onClick={onToggleMusic}>🎵 音乐 {musicOn ? "开" : "关"}</button>
-          <button onClick={onToggleMusic}>⚙ 设置</button>
+          <button onClick={onSettings}>⚙ 设置</button>
         </div>
         <SaveSummaryCard saveSummary={saveSummary} />
       </section>
@@ -1099,6 +1152,78 @@ function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadM
         <Status label="阶段" value={info.phase} /><Status label="下次风暴" value={`${info.nextDisasterIn}天`} danger={info.nextDisasterIn <= 2 && snapshot.day >= 8} />
       </section>
     </main>
+  );
+}
+
+function TitleDexPanel({ state, onClose }: { state: GameState; completion: number; onClose: () => void }) {
+  const discovered = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
+  const percent = Math.round((discovered / fishList.length) * 100);
+  return (
+    <div className="modal-backdrop game-panel-backdrop" onClick={onClose}>
+      <section className="wide-modal game-module-panel module-dex" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Fish Dex</p>
+            <h2>📘 图鉴预览</h2>
+          </div>
+          <button className="compact-button" onClick={onClose}>关闭</button>
+        </div>
+        <FishDexSummary state={state} discoveredCount={discovered} completion={percent} />
+        <div className="fishdex-grid">
+          {fishList.map((fishItem) => <FishDexCard key={fishItem.id} fish={fishItem} state={state} />)}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function TitleSettingsPanel({
+  musicOn,
+  musicMode,
+  currentTrackId,
+  musicError,
+  onToggleMusic,
+  onMusicModeChange,
+  onNextTrack,
+  onClose,
+}: {
+  musicOn: boolean;
+  musicMode: MusicMode;
+  currentTrackId?: string;
+  musicError?: string;
+  onToggleMusic: () => void;
+  onMusicModeChange: (mode: MusicMode) => void;
+  onNextTrack: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop game-panel-backdrop" onClick={onClose}>
+      <section className="wide-modal game-module-panel module-settings" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Settings</p>
+            <h2>⚙ 设置</h2>
+          </div>
+          <button className="compact-button" onClick={onClose}>关闭</button>
+        </div>
+        <div className="music-settings-card">
+          <div>
+            <strong>🎵 背景音乐</strong>
+            <p>当前模式：{musicMode === "random" ? "随机播放" : musicTracks.find((track) => track.id === musicMode)?.name ?? "随机播放"}</p>
+            <p>当前曲目：{musicTracks.find((track) => track.id === currentTrackId)?.name ?? "等待选择"}</p>
+            {musicError && <p className="music-error">{musicError}</p>}
+          </div>
+          <select value={musicMode} onChange={(event) => onMusicModeChange(event.target.value as MusicMode)}>
+            <option value="random">随机播放</option>
+            {musicTracks.map((track) => <option value={track.id} key={track.id}>{track.name}</option>)}
+          </select>
+          <div className="music-actions">
+            <button onClick={onToggleMusic}>音乐 {musicOn ? "关" : "开"}</button>
+            <button onClick={onNextTrack}>下一首</button>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1127,6 +1252,7 @@ function LoadScreen({ saveSummary, onBack, onLoad }: { saveSummary: SaveSummary;
 }
 
 function CatSelectScreen({ onBack, onChoose }: { onBack: () => void; onChoose: (catType: CatType) => void }) {
+  const [selectedCat, setSelectedCat] = useState<(typeof catOptions)[number] | undefined>();
   return (
     <main className="start-screen">
       <section className="start-card">
@@ -1135,7 +1261,7 @@ function CatSelectScreen({ onBack, onChoose }: { onBack: () => void; onChoose: (
         <p className="intro">猫猫不会战斗，只会陪你在海上生活。黑猫 kibi 是推荐默认伙伴。</p>
         <div className="cat-select-grid">
           {catOptions.map((cat) => (
-            <button className={`cat-choice-card ${cat.recommended ? "recommended" : ""}`} key={cat.type} onClick={() => onChoose(cat.type)}>
+            <button className={`cat-choice-card ${cat.recommended ? "recommended" : ""}`} key={cat.type} onClick={() => setSelectedCat(cat)}>
               {cat.recommended && <span className="item-badge">推荐</span>}
               <span className="cat-choice-emoji">{cat.emoji}</span>
               <strong>{cat.defaultName}</strong>
@@ -1147,6 +1273,22 @@ function CatSelectScreen({ onBack, onChoose }: { onBack: () => void; onChoose: (
         </div>
         <button className="compact-button menu-back" onClick={onBack}>返回天赋选择</button>
       </section>
+      {selectedCat && (
+        <div className="modal-backdrop" onClick={() => setSelectedCat(undefined)}>
+          <section className="crate-modal cat-confirm-modal" onClick={(event) => event.stopPropagation()}>
+            <span className="modal-emoji">{selectedCat.emoji}</span>
+            <p className="eyebrow">确认猫猫伙伴</p>
+            <h2>{selectedCat.defaultName}</h2>
+            <p><strong>{selectedCat.breed}</strong></p>
+            <p>{selectedCat.personality}</p>
+            <p className="ready">{selectedCat.bonus}</p>
+            <div className="music-actions">
+              <button onClick={() => setSelectedCat(undefined)}>返回选择</button>
+              <button className="primary-action" onClick={() => onChoose(selectedCat.type)}>确定出发</button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
