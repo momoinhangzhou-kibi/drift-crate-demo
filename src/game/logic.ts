@@ -669,6 +669,130 @@ export function feedCat(state: GameState, optionId: string): GameState {
   );
 }
 
+export function petCat(state: GameState): GameState {
+  const cat = state.cat ?? createCatState("black");
+  if (cat.lastPetDay === state.day) return addLog(state, "warning", "猫猫互动", `${cat.name} 今天已经被摸得很舒服了，先让它自己晒会儿太阳吧。`);
+
+  const next = updateCat({ ...state, mood: clamp(state.mood + 1) }, {
+    mood: cat.mood + 5,
+    intimacy: cat.intimacy + 1,
+    lastPetDay: state.day,
+    todayEvent: `${cat.name} 被轻轻摸了摸，开心地眯起眼。`,
+  });
+
+  return addLog(next, "event", "猫猫互动", `${cat.emoji} 你轻轻抚摸了 ${cat.name}。猫心情 +5，亲密 +1，你的 Mood +1。`, ["猫心情 +5", "猫亲密 +1", "Mood +1"], true);
+}
+
+export function playWithCat(state: GameState): GameState {
+  const cat = state.cat ?? createCatState("black");
+  if (cat.lastPlayDay === state.day) return addLog(state, "warning", "猫猫互动", `${cat.name} 今天已经玩累了，正趴在木筏边休息。`);
+
+  const next = updateCat({ ...state, mood: clamp(state.mood + 2) }, {
+    mood: cat.mood + 8,
+    intimacy: cat.intimacy + 2,
+    lastPlayDay: state.day,
+    todayEvent: `${cat.name} 玩得很开心，尾巴晃来晃去。`,
+  });
+
+  return addLog(next, "event", "猫猫互动", `${cat.emoji} 你陪 ${cat.name} 玩了一会儿。猫心情 +8，亲密 +2，你的 Mood +2。`, ["猫心情 +8", "猫亲密 +2", "Mood +2"], true);
+}
+
+function addCatFoundFish(state: GameState, fishId: string) {
+  const fishItem = fishList.find((item) => item.id === fishId) ?? fishList[0];
+  const result = addFish(state, fishItem, 1);
+  return {
+    state: result.state,
+    reward: `${fishItem.emoji} ${fishItem.name} x1`,
+    eventText: `叼来了「${fishItem.name}」x1。`,
+    important: result.isNew,
+  };
+}
+
+function triggerCatEvent(state: GameState, source: "explore" | "daily", stormy = false): GameState {
+  const cat = state.cat ?? createCatState("black");
+  const choices = [
+    { id: "material", weight: 24 + (cat.type === "calico" ? 18 : 0) },
+    { id: "coins", weight: 18 + (cat.type === "calico" ? 8 : 0) },
+    { id: "ticket", weight: 4 + (cat.type === "calico" ? 5 : 0) },
+    { id: "fish", weight: 18 + (cat.type === "cow" ? 4 : 0) },
+    { id: "mood", weight: 16 + (cat.type === "cow" ? 12 : 0) },
+    { id: "mystery", weight: 6 + (cat.type === "black" ? 16 : 0) },
+    { id: "hungry", weight: cat.type === "orange" && cat.satiety < 55 ? 12 : 3 },
+    { id: "nothing", weight: 18 },
+  ];
+
+  if (stormy && Math.random() < (cat.type === "black" && cat.intimacy > 35 ? 0.22 : 0.45)) {
+    const next = updateCat(state, { mood: cat.mood - 5, todayEvent: `${cat.name} 被坏天气吓了一跳，躲到补给箱旁边。` });
+    return addLog(next, "event", "猫猫伙伴", `${cat.emoji} ${cat.name} 有点害怕，猫心情 -5。`, ["猫心情 -5"], true);
+  }
+
+  const total = choices.reduce((sum, choice) => sum + choice.weight, 0);
+  let roll = Math.random() * total;
+  const selected = choices.find((choice) => {
+    roll -= choice.weight;
+    return roll <= 0;
+  }) ?? choices[choices.length - 1];
+
+  let next = state;
+  let message = "";
+  let rewards: string[] = [];
+  let important = false;
+
+  if (selected.id === "material") {
+    const found = pick(["wood", "rope", "plastic", "scrap"] as ItemId[]);
+    const amount = found === "scrap" ? 1 : randomInt(1, 2);
+    next = addItem(next, found, amount);
+    message = `${cat.name} 翻找木筏角落，找到了${itemNames[found]} x${amount}。`;
+    rewards = [`${itemNames[found]} x${amount}`];
+  } else if (selected.id === "coins") {
+    const amount = cat.type === "calico" ? randomInt(4, 8) : randomInt(2, 6);
+    next = { ...next, coins: next.coins + amount };
+    message = `${cat.name} 扒拉出 ${amount} 贝壳币。`;
+    rewards = [`+${amount} 贝壳币`];
+  } else if (selected.id === "ticket") {
+    next = addItem(next, "furnitureTicket", 1);
+    message = `${cat.name} 从补给箱底下拖出一张家具券。`;
+    rewards = ["家具券 x1"];
+    important = true;
+  } else if (selected.id === "fish") {
+    const fishResult = addCatFoundFish(next, Math.random() < 0.45 ? "clear-shrimp" : "tiny-minnow");
+    next = fishResult.state;
+    message = `${cat.name} ${fishResult.eventText}`;
+    rewards = [fishResult.reward];
+    important = fishResult.important;
+  } else if (selected.id === "mood") {
+    const moodGain = cat.type === "cow" ? 3 : 2;
+    next = { ...next, mood: clamp(next.mood + moodGain) };
+    message = cat.type === "black" ? `${cat.name} 夜间巡逻后安静地坐在你身边，像提前确认过海面很安全。` : `${cat.name} 趴在你旁边陪你看海。`;
+    rewards = [`Mood +${moodGain}`];
+  } else if (selected.id === "mystery") {
+    const moodGain = cat.type === "black" ? 3 : 1;
+    next = { ...next, mood: clamp(next.mood + moodGain) };
+    message = `${cat.name} 盯着海面看了很久，像发现了什么潮汐秘密。`;
+    rewards = [`Mood +${moodGain}`];
+    important = cat.type === "black";
+  } else if (selected.id === "hungry") {
+    next = updateCat(next, { mood: cat.mood - 2 });
+    message = `${cat.name} 蹭了蹭你的手，像是在提醒你它想吃鱼。`;
+    rewards = ["猫心情 -2"];
+  } else {
+    message = `${cat.name} 认真翻找了很久，什么都没找到，但它真的很努力。`;
+  }
+
+  next = updateCat(next, {
+    todayEvent: message,
+    ...(source === "explore" ? { lastExploreDay: state.day } : {}),
+  });
+
+  return addLog(next, "event", source === "explore" ? "猫猫探索" : "猫猫伙伴", `${cat.emoji} ${message}`, rewards, important);
+}
+
+export function exploreWithCat(state: GameState): GameState {
+  const cat = state.cat ?? createCatState("black");
+  if (cat.lastExploreDay === state.day) return addLog(state, "warning", "猫猫探索", `${cat.name} 今天已经认真翻找过了，暂时没有新的发现。`);
+  return triggerCatEvent(state, "explore");
+}
+
 export function upgradeBoat(state: GameState): GameState {
   if (state.boatLevel >= 4) return addLog(state, "warning", "最高等级", "你的海上小商铺已经是 Demo 里的最高等级了。");
 
@@ -777,6 +901,10 @@ function applyCatDay(state: GameState, stormy: boolean): GameState {
   if (next.cat.satiety < 20) {
     next = updateCat(next, { mood: next.cat.mood - 5, todayEvent: `${next.cat.name} 肚子有点空，今天不太想玩。` });
     next = addLog(next, "warning", "猫猫伙伴", `${next.cat.emoji} ${next.cat.name} 有点饿了，猫猫心情 -5。`, ["猫心情 -5"]);
+  }
+
+  if (Math.random() < (next.cat.type === "calico" ? 0.42 : next.cat.type === "black" ? 0.34 : 0.28)) {
+    next = triggerCatEvent(next, "daily", stormy);
   }
 
   return next;
@@ -953,6 +1081,9 @@ function migrateCat(rawCat: Partial<CatState> | undefined): CatState {
     satiety: clamp(rawCat?.satiety ?? fallback.satiety),
     mood: clamp(rawCat?.mood ?? fallback.mood),
     todayEvent: rawCat?.todayEvent ?? fallback.todayEvent,
+    lastPetDay: rawCat?.lastPetDay ?? fallback.lastPetDay,
+    lastPlayDay: rawCat?.lastPlayDay ?? fallback.lastPlayDay,
+    lastExploreDay: rawCat?.lastExploreDay ?? fallback.lastExploreDay,
   };
 }
 

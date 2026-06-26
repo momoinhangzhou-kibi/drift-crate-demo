@@ -2846,6 +2846,24 @@ p {
   box-shadow: 0 8px 18px rgba(55, 98, 116, 0.18);
 }
 
+.cat-bubble {
+  position: absolute;
+  right: 80%;
+  bottom: 72%;
+  width: max-content;
+  max-width: 150px;
+  border: 2px solid rgba(255, 255, 255, 0.86);
+  border-radius: 999px;
+  padding: 0.28rem 0.6rem;
+  color: #24506b;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 18px rgba(55, 98, 116, 0.18);
+  font-size: 0.78rem !important;
+  font-weight: 900;
+  line-height: 1.1 !important;
+  white-space: nowrap;
+}
+
 .stage-cat span {
   font-size: 2rem;
   line-height: 1;
@@ -2874,6 +2892,26 @@ p {
   margin: 0.8rem 0;
 }
 
+.cat-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.cat-action-grid button {
+  display: grid;
+  gap: 0.2rem;
+  min-height: 78px;
+  padding: 0.65rem;
+  text-align: left;
+  background: linear-gradient(180deg, #fffdf4, #e9faff);
+}
+
+.cat-action-grid small {
+  color: #5d8496;
+  font-weight: 800;
+}
+
 .cat-feed-list {
   display: grid;
   gap: 0.6rem;
@@ -2899,7 +2937,8 @@ p {
 
 @media (max-width: 720px) {
   .cat-select-grid,
-  .cat-stat-grid {
+  .cat-stat-grid,
+  .cat-action-grid {
     grid-template-columns: 1fr;
   }
 }

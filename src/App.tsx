@@ -8,6 +8,7 @@ import {
   decorate,
   endDay,
   eatFood,
+  exploreWithCat,
   feedCat,
   fish,
   getCatFeedOptions,
@@ -23,7 +24,9 @@ import {
   loadGameWithLog,
   noteNoFood,
   openCrate,
+  petCat,
   placeInventoryFurniture,
+  playWithCat,
   repairBoat,
   removeFurniture,
   resetGame,
@@ -501,6 +504,7 @@ function App() {
                 <div className="furniture-strip">{state.furniture.slice(0, 6).map((item) => <span key={item}>{furnitureIcon(item)}</span>)}</div>
                 <div className="stage-cat" title={`${state.cat.name} / ${state.cat.breed}`}>
                   <CatIcon cat={state.cat} />
+                  <span className="cat-bubble">{catBubble(state.cat)}</span>
                   <small>{state.cat.name}</small>
                 </div>
                 <div className="waves">≈≈≈≈≈≈≈≈≈≈≈</div>
@@ -676,6 +680,9 @@ function App() {
           onSellFish={openSellPanel}
           onCook={(recipeId) => applyAction("制作料理", cookRecipe(state, recipeId))}
           onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
+          onPetCat={() => applyAction("抚摸猫猫", petCat(state))}
+          onPlayCat={() => applyAction("陪猫玩", playWithCat(state))}
+          onExploreCat={() => applyAction("猫猫探索", exploreWithCat(state))}
           onDecorate={() => applyAction("布置家具", decorate(state))}
           onFurnitureSelect={setSelectedFurniture}
           onToggleMusic={toggleMusic}
@@ -734,6 +741,9 @@ function App() {
           state={state}
           onClose={() => setShowCat(false)}
           onFeed={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
+          onPet={() => applyAction("抚摸猫猫", petCat(state))}
+          onPlay={() => applyAction("陪猫玩", playWithCat(state))}
+          onExplore={() => applyAction("猫猫探索", exploreWithCat(state))}
         />
       )}
       {selectedItem && (
@@ -948,6 +958,15 @@ function CatIcon({ cat, size = "normal" }: { cat: Pick<CatState | CatOption, "ic
   );
 }
 
+function catBubble(cat: CatState) {
+  const event = cat.todayEvent ?? "";
+  if (cat.satiety < 25) return "想吃鱼";
+  if (cat.mood < 35 || event.includes("害怕") || event.includes("吓")) return "有点害怕";
+  if (event.includes("找到") || event.includes("拖出") || event.includes("扒拉") || event.includes("叼来")) return "找到了东西！";
+  if (event.includes("满足") || cat.mood > 80) return "今天很满足";
+  return "喵～";
+}
+
 const moduleItems: { id: ModulePanel; icon: string; label: string }[] = [
   { id: "inventory", icon: "箱", label: "背包" },
   { id: "shop", icon: "店", label: "商店" },
@@ -985,6 +1004,9 @@ function GameModulePanel({
   onSellFish,
   onCook,
   onFeedCat,
+  onPetCat,
+  onPlayCat,
+  onExploreCat,
   onDecorate,
   onFurnitureSelect,
   musicOn,
@@ -1009,6 +1031,9 @@ function GameModulePanel({
   onSellFish: (fishId?: string) => void;
   onCook: (recipeId: string) => void;
   onFeedCat: (optionId: string) => void;
+  onPetCat: () => void;
+  onPlayCat: () => void;
+  onExploreCat: () => void;
   onDecorate: () => void;
   onFurnitureSelect: (furniture: string) => void;
   musicOn: boolean;
@@ -1066,7 +1091,7 @@ function GameModulePanel({
 
         {panel === "journal" && <JournalList logs={state.logs} />}
 
-        {panel === "cat" && <CatPanelContent state={state} onFeed={onFeedCat} />}
+        {panel === "cat" && <CatPanelContent state={state} onFeed={onFeedCat} onPet={onPetCat} onPlay={onPlayCat} onExplore={onExploreCat} />}
 
         {panel === "home" && (
           <div className="module-stack">
@@ -1134,7 +1159,7 @@ function JournalList({ logs }: { logs: LogEntry[] }) {
   );
 }
 
-function CatPanelContent({ state, onFeed }: { state: GameState; onFeed: (optionId: string) => void }) {
+function CatPanelContent({ state, onFeed, onPet, onPlay, onExplore }: { state: GameState; onFeed: (optionId: string) => void; onPet: () => void; onPlay: () => void; onExplore: () => void }) {
   const options = getCatFeedOptions(state);
   const cat = state.cat;
   return (
@@ -1150,6 +1175,20 @@ function CatPanelContent({ state, onFeed }: { state: GameState; onFeed: (optionI
         <Status label="亲密度" value={cat.intimacy} />
         <Status label="饱腹度" value={cat.satiety} danger={cat.satiety < 20} />
         <Status label="猫心情" value={cat.mood} />
+      </div>
+      <div className="cat-action-grid">
+        <button onClick={onPet}>
+          <strong>抚摸</strong>
+          <small>{cat.lastPetDay === state.day ? "今日已互动" : "猫心情 +5 / 亲密 +1"}</small>
+        </button>
+        <button onClick={onPlay}>
+          <strong>陪玩</strong>
+          <small>{cat.lastPlayDay === state.day ? "今日已互动" : "猫心情 +8 / 亲密 +2"}</small>
+        </button>
+        <button onClick={onExplore}>
+          <strong>探索 / 翻找</strong>
+          <small>{cat.lastExploreDay === state.day ? "今日已探索" : "触发随机猫咪事件"}</small>
+        </button>
       </div>
       <div className="cat-feed-list">
         {options.length ? options.map((option) => (
@@ -1336,7 +1375,7 @@ function CatSelectScreen({ onBack, onChoose }: { onBack: () => void; onChoose: (
   );
 }
 
-function CatModal({ state, onClose, onFeed }: { state: GameState; onClose: () => void; onFeed: (optionId: string) => void }) {
+function CatModal({ state, onClose, onFeed, onPet, onPlay, onExplore }: { state: GameState; onClose: () => void; onFeed: (optionId: string) => void; onPet: () => void; onPlay: () => void; onExplore: () => void }) {
   const options = getCatFeedOptions(state);
   const cat = state.cat;
 
@@ -1361,6 +1400,20 @@ function CatModal({ state, onClose, onFeed }: { state: GameState; onClose: () =>
           <Status label="亲密度" value={cat.intimacy} />
           <Status label="饱腹度" value={cat.satiety} danger={cat.satiety < 20} />
           <Status label="猫心情" value={cat.mood} />
+        </div>
+        <div className="cat-action-grid">
+          <button onClick={onPet}>
+            <strong>抚摸</strong>
+            <small>{cat.lastPetDay === state.day ? "今日已互动" : "猫心情 +5 / 亲密 +1"}</small>
+          </button>
+          <button onClick={onPlay}>
+            <strong>陪玩</strong>
+            <small>{cat.lastPlayDay === state.day ? "今日已互动" : "猫心情 +8 / 亲密 +2"}</small>
+          </button>
+          <button onClick={onExplore}>
+            <strong>探索 / 翻找</strong>
+            <small>{cat.lastExploreDay === state.day ? "今日已探索" : "触发随机猫咪事件"}</small>
+          </button>
         </div>
         <h3>喂猫</h3>
         {options.length ? (

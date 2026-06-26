@@ -215,6 +215,9 @@ export function createCatState(type: CatType = "black"): CatState {
     satiety: 60,
     mood: 70,
     todayEvent: "它正安静适应这片海。",
+    lastPetDay: 0,
+    lastPlayDay: 0,
+    lastExploreDay: 0,
   };
 }
 

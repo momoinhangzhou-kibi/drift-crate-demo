@@ -127,6 +127,9 @@ export interface CatState {
   satiety: number;
   mood: number;
   todayEvent?: string;
+  lastPetDay?: number;
+  lastPlayDay?: number;
+  lastExploreDay?: number;
 }
 
 export interface CatFeedOption {
