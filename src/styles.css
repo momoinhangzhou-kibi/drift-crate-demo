@@ -1094,6 +1094,45 @@ p {
   gap: 0.9rem;
 }
 
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.guide-card {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border: 1px solid rgba(74, 149, 185, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.guide-card > span {
+  display: grid;
+  flex: 0 0 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 11px;
+  background: #dff3fb;
+  color: #1e6790;
+  font-weight: 800;
+}
+
+.guide-card h3 {
+  margin: 0 0 0.25rem;
+  color: #245d79;
+  font-size: 0.95rem;
+}
+
+.guide-card p {
+  margin: 0;
+  color: #496b7d;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
 .module-logs {
   max-height: 62vh;
   overflow: auto;
@@ -2631,6 +2670,10 @@ p {
   }
 
   .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-grid {
     grid-template-columns: 1fr;
   }
 }
