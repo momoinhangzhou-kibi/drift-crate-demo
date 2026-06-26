@@ -16,6 +16,7 @@ import {
   fish,
   getCatFeedOptions,
   getRecipeStatus,
+  getRepairPreview,
   getMissingRequirements,
   getUpgradeCost,
   getSaveSummary,
@@ -209,6 +210,7 @@ function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const selectedTalent = talents.find((talent) => talent.id === state.talent);
   const upgradeCost = useMemo(() => getUpgradeCost(state), [state]);
+  const repairPreview = useMemo(() => getRepairPreview(state), [state]);
   const hotpotMissing = useMemo(() => getMissingRequirements(state, { hotpotBase: 1, veggiePack: 1, meatSlices: 1, water: 1 }), [state]);
   const readyToCook = canCookAnyRecipe(state);
   const readyToEat = hasEdibleFood(state);
@@ -650,15 +652,15 @@ function App() {
             <ActionButton onClick={() => applyAction("钓鱼", fish(state))}>🎣 钓鱼</ActionButton>
             <ActionButton onClick={() => applyAction("打捞", salvage(state))}>🪝 打捞</ActionButton>
             <ActionButton badge={state.inventory.commonCrate > 0 ? "可开" : undefined} onClick={() => openCrateAndShow("commonCrate")}>
-              🎁 开普通包 x{state.inventory.commonCrate}
+              🎁 开普通包 x{state.inventory.commonCrate}<small>消耗普通包 x1</small>
             </ActionButton>
             <ActionButton badge={state.inventory.premiumCrate > 0 ? "可开" : undefined} onClick={() => openCrateAndShow("premiumCrate")}>
-              💝 开高级包 x{state.inventory.premiumCrate}
+              💝 开高级包 x{state.inventory.premiumCrate}<small>消耗高级包 x1</small>
             </ActionButton>
             <ActionButton badge={readyToUpgrade ? "可升级" : undefined} onClick={() => applyAction("升级载具", upgradeBoat(state))}>
-              🔨 升级载具
+              🔨 升级载具<small>{state.boatLevel >= 4 ? "已达最高等级" : "材料需求见载具信息"}</small>
             </ActionButton>
-            <ActionButton onClick={() => applyAction("修理载具", repairBoat(state))}>🧰 修理载具</ActionButton>
+            <ActionButton onClick={() => applyAction("修理载具", repairBoat(state))}>🧰 修理载具<small>{Object.entries(repairPreview.cost).map(([id, amount]) => `${itemNames[id as ItemId]} x${amount}`).join("、") || "无需材料"} · HP +{repairPreview.repairValue}</small></ActionButton>
             <ActionButton badge={readyToCook ? "可做" : undefined} onClick={() => setActivePanel("recipes")}>
               🍲 制作料理
             </ActionButton>
@@ -1365,7 +1367,7 @@ function CatPanelContent({ state, onFeed, onPet, onPlay, onExplore }: { state: G
           <button key={option.id} onClick={() => onFeed(option.id)}>
             <span>{option.emoji}</span>
             <strong>{option.label}</strong>
-            <small>饱腹 +{option.catSatiety} / 亲密 +{option.catIntimacy} / Mood +{option.playerMood}</small>
+            <small>消耗 {option.label} x1 · 饱腹 +{option.catSatiety} / 亲密 +{option.catIntimacy} / Mood +{option.playerMood}</small>
           </button>
         )) : <p className="hint">背包里暂时没有适合喂猫的食物。</p>}
       </div>
@@ -1624,7 +1626,7 @@ function CatModal({ state, onClose, onFeed, onPet, onPlay, onExplore }: { state:
               <button key={option.id} onClick={() => onFeed(option.id)}>
                 <span>{option.emoji}</span>
                 <strong>{option.label}</strong>
-                <small>饱腹 +{option.catSatiety} / 亲密 +{option.catIntimacy} / Mood +{option.playerMood}</small>
+                <small>消耗 {option.label} x1 · 饱腹 +{option.catSatiety} / 亲密 +{option.catIntimacy} / Mood +{option.playerMood}</small>
               </button>
             ))}
           </div>
@@ -1682,7 +1684,7 @@ function TideShop({ state, onBuy }: { state: GameState; onBuy: (item: ShopItem) 
     <div className="tide-shop">
       <div className="section-heading">
         <h3>🌊 潮汐商店</h3>
-        <span className="notice-pill">{daysLeft}天后刷新</span>
+        <span className="notice-pill">余额 {state.coins} 🐚 · {daysLeft}天后刷新</span>
       </div>
       <div className="shop-stock-grid">
         {state.shopStock.map((item) => (
@@ -1690,7 +1692,7 @@ function TideShop({ state, onBuy }: { state: GameState; onBuy: (item: ShopItem) 
             <span>{itemEmoji[item.id]}</span>
             <strong>{itemNames[item.id]}</strong>
             <small>{categoryLabels[item.category]} · {item.rarity}</small>
-            <em>{item.price} 🐚 · x{item.quantity}</em>
+            <em>购买 {item.price} 🐚 · 剩余 x{item.quantity}</em>
           </button>
         ))}
       </div>
@@ -2217,6 +2219,10 @@ function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameStat
   const status = getRecipeStatus(state, recipe);
   const food = foodItems.find((item) => item.id === recipe.output);
   const rarity = recipe.rarity ?? "Common";
+  const firstCooked = state.firstCookedRecipeIds?.includes(recipe.id);
+  const weatherBonus = ["fishSoup", "seafoodSoup", "cannedRamen", "warmFishSoup", "driftHotpot", "deluxeSeafoodPot"].includes(recipe.output)
+    ? state.weather === "寒潮" ? "寒潮热食加成：Mood +6" : state.weather === "暴雨" || state.weather === "风暴" ? "坏天气热食加成：Mood +3" : "寒潮/坏天气时有热食加成"
+    : recipe.id.includes("grilled") || recipe.id.includes("skewer") ? "打火机或烤架可少消耗木板" : "天气加成：无";
 
   return (
     <article className={`recipe-card recipe-rarity-${rarity.toLowerCase()} ${status.canCook ? "craftable" : ""} ${status.unlocked ? "" : "locked"}`}>
@@ -2233,6 +2239,7 @@ function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameStat
         <span>{rarity}</span>
         <span>{status.unlocked ? "已解锁" : recipe.unlockHint ?? "未解锁"}</span>
         {recipe.catFavorite && <span>猫猫也喜欢</span>}
+        {firstCooked && <span>已收录</span>}
       </div>
       <div className="recipe-block">
         <strong>所需材料</strong>
@@ -2246,8 +2253,9 @@ function RecipeCard({ recipe, state, onCook }: { recipe: Recipe; state: GameStat
       <div className="recipe-result">
         <span>获得：{itemEmoji[recipe.output]} {itemNames[recipe.output]} x1</span>
         {food && <span>进食效果：Hunger +{food.hunger} / Mood +{food.mood}</span>}
+        <span className="recipe-weather-bonus">{weatherBonus}</span>
       </div>
-      <p className={status.canCook ? "ready" : "hint"}>{status.canCook ? "材料齐了，可以制作。" : status.unlocked ? `还缺：${status.missing.join("、")}` : recipe.unlockHint ?? "继续漂流后解锁。"}</p>
+      <p className={status.canCook ? "ready" : "hint recipe-missing"}>{status.canCook ? "材料齐了，可以制作。" : status.unlocked ? `不足：${status.missing.join("、")}` : recipe.unlockHint ?? "继续漂流后解锁。"}</p>
       <button className={status.canCook ? "primary-action" : ""} disabled={!status.canCook} onClick={onCook}>制作</button>
     </article>
   );

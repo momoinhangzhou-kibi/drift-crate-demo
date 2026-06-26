@@ -241,6 +241,7 @@ export interface GameState {
   shopStock: ShopItem[];
   cat: CatState;
   fishDexRewardsClaimed: number[];
+  firstCookedRecipeIds: string[];
   gameOverReason?: string;
   tutorialSeen?: boolean;
   lastCard?: Card;

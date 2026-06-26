@@ -1279,6 +1279,15 @@ p {
   position: relative;
 }
 
+.action-button small {
+  display: block;
+  margin-top: 0.2rem;
+  color: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  opacity: 0.78;
+}
+
 .actions .night {
   background: #1f4264;
   color: #ffffff;
@@ -2328,6 +2337,16 @@ p {
   gap: 0.3rem;
   color: #17647b;
   font-weight: 900;
+}
+
+.recipe-weather-bonus {
+  color: #a56d1f;
+  font-size: 0.8rem;
+}
+
+.recipe-missing {
+  color: #b34b40;
+  font-weight: 800;
 }
 
 .primary-action {

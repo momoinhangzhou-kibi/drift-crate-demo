@@ -235,6 +235,9 @@ export function getCatFeedOptions(state: GameState): CatFeedOption[] {
     (state.inventory.cannedFood ?? 0) > 0 && { id: "canned-food", label: itemNames.cannedFood, emoji: itemEmoji.cannedFood, catSatiety: 25, catIntimacy: 4, catMood: 2, playerMood: 2, itemId: "cannedFood" as ItemId },
     (state.inventory.fishSoup ?? 0) > 0 && { id: "fish-soup", label: itemNames.fishSoup, emoji: itemEmoji.fishSoup, catSatiety: 20, catIntimacy: 2, catMood: 5, playerMood: 2, itemId: "fishSoup" as ItemId },
     (state.inventory.grilledFish ?? 0) > 0 && { id: "grilled-fish", label: itemNames.grilledFish, emoji: itemEmoji.grilledFish, catSatiety: 20, catIntimacy: 2, catMood: 5, playerMood: 2, itemId: "grilledFish" as ItemId },
+    (state.inventory.grilledFishSkewer ?? 0) > 0 && { id: "grilled-fish-skewer", label: itemNames.grilledFishSkewer, emoji: itemEmoji.grilledFishSkewer, catSatiety: 24, catIntimacy: 3, catMood: 6, playerMood: 2, itemId: "grilledFishSkewer" as ItemId },
+    (state.inventory.shrimpRiceBall ?? 0) > 0 && { id: "shrimp-rice-ball", label: itemNames.shrimpRiceBall, emoji: itemEmoji.shrimpRiceBall, catSatiety: 22, catIntimacy: 3, catMood: 6, playerMood: 2, itemId: "shrimpRiceBall" as ItemId },
+    (state.inventory.warmFishSoup ?? 0) > 0 && { id: "warm-fish-soup", label: itemNames.warmFishSoup, emoji: itemEmoji.warmFishSoup, catSatiety: 26, catIntimacy: 3, catMood: 8, playerMood: 3, itemId: "warmFishSoup" as ItemId },
   ].filter(Boolean) as CatFeedOption[];
 }
 
@@ -666,12 +669,23 @@ export function cookRecipe(state: GameState, recipeId: string): GameState {
 
   next = addItem({ ...next, fishCollection }, recipe.output, 1);
 
+  const firstCooked = !(next.firstCookedRecipeIds ?? []).includes(recipe.id);
+  if (firstCooked) {
+    next = {
+      ...next,
+      firstCookedRecipeIds: [...(next.firstCookedRecipeIds ?? []), recipe.id],
+      coins: next.coins + 3,
+      mood: clamp(next.mood + 1),
+    };
+    next = addLog(next, "discovery", "新料理", `首次做好「${recipe.name}」！料理书收录成功。`, ["NEW", "Mood +1", "+3 贝壳币"], true, true);
+  }
+
   const usedFishNames = status.selectedFish.map((fishItem) => `「${fishItem.name}」`);
   const message = usedFishNames.length
     ? `你用${usedFishNames.join("和")}做了一份${recipe.name}。`
     : `你做好了一份${recipe.name}，海上小屋飘起了香味。`;
 
-  return addLog(next, "cooking", "料理", message, [`${recipe.emoji} ${recipe.name} x1`], recipe.rarity === "Epic" || recipe.rarity === "Legendary");
+  return addLog(next, "cooking", "料理", `${message}${firstCooked ? " 这是第一次完成它，获得了小小的料理灵感。" : ""}`, [`${recipe.emoji} ${recipe.name} x1`, ...(firstCooked ? ["首次制作奖励：Mood +1 / +3 贝壳币"] : [])], recipe.rarity === "Epic" || recipe.rarity === "Legendary" || firstCooked);
 }
 
 export function cookHotpot(state: GameState): GameState {
@@ -692,13 +706,15 @@ export function eatFood(state: GameState, foodId: ItemId): GameState {
 
   const hotpotTableBonus = state.furniture.includes("海上火锅桌") && food.mood > 0 ? 1 : 0;
   const chefBonus = state.talent === "cooking" ? 3 : 0;
+  const warmMeal = ["fishSoup", "seafoodSoup", "cannedRamen", "warmFishSoup", "driftHotpot", "deluxeSeafoodPot"].includes(food.id);
+  const weatherBonus = warmMeal && state.weather === "寒潮" ? 6 : warmMeal && (state.weather === "暴雨" || state.weather === "风暴") ? 3 : 0;
 
   return addLog(
-    { ...next, hunger: clamp(next.hunger + food.hunger + chefBonus), mood: clamp(next.mood + food.mood + hotpotTableBonus + chefBonus) },
+    { ...next, hunger: clamp(next.hunger + food.hunger + chefBonus), mood: clamp(next.mood + food.mood + hotpotTableBonus + chefBonus + weatherBonus) },
     "cooking",
     "进食",
     hotpotTableBonus ? `${message} 海上火锅桌让这顿饭更有仪式感，Mood 额外 +1。` : message,
-    [`Hunger +${food.hunger + chefBonus}`, `Mood +${food.mood + hotpotTableBonus + chefBonus}`, ...(chefBonus ? ["海上料理人生效"] : [])],
+    [`Hunger +${food.hunger + chefBonus}`, `Mood +${food.mood + hotpotTableBonus + chefBonus + weatherBonus}`, ...(chefBonus ? ["海上料理人生效"] : []), ...(weatherBonus ? [`${state.weather}热食加成：Mood +${weatherBonus}`] : [])],
   );
 }
 
@@ -913,6 +929,15 @@ export function upgradeBoat(state: GameState): GameState {
     ["Boat Max HP 提升", "Boat HP 部分恢复", "Mood +12", ...(state.talent === "crafting" ? ["手作达人：升级材料已节省"] : [])],
     true,
   );
+}
+
+export function getRepairPreview(state: GameState) {
+  const hasToolbox = state.inventory.toolbox > 0;
+  const cost: Partial<Record<ItemId, number>> = hasToolbox ? { wood: 2 } : { wood: 3, scrap: 1 };
+  if (state.talent === "crafting" && cost.wood) cost.wood = Math.max(1, cost.wood - 1);
+  const useRepairTape = state.inventory.repairTape > 0;
+  const repairValue = (hasToolbox ? 32 : 20) + (useRepairTape ? 12 : 0) + (state.talent === "repair" ? 8 : 0);
+  return { cost, repairValue, useRepairTape };
 }
 
 export function repairBoat(state: GameState): GameState {
@@ -1227,8 +1252,9 @@ function migrateState(raw: Partial<GameState>): GameState {
     : initial.logs;
 
   const fishDexRewardsClaimed = Array.isArray(raw.fishDexRewardsClaimed) ? raw.fishDexRewardsClaimed : [];
+  const firstCookedRecipeIds = Array.isArray(raw.firstCookedRecipeIds) ? raw.firstCookedRecipeIds.filter((id): id is string => typeof id === "string") : [];
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds };
 }
 
 function readLegacySavedPayload(): { state: GameState; savedAt?: string } | undefined {

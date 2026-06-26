@@ -425,6 +425,7 @@ export function createInitialState(): GameState {
     shopStock: createShopStock(1),
     cat: createCatState("black"),
     fishDexRewardsClaimed: [],
+    firstCookedRecipeIds: [],
     logs: [
       {
         id: crypto.randomUUID(),
