@@ -42,6 +42,7 @@ import {
   sellSelectedFish,
   startGame,
   upgradeBoat,
+  useUtilityItem,
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
 import type { SaveSlot } from "./game/logic";
@@ -833,6 +834,7 @@ function App() {
             applyAction(crate === "premiumCrate" ? "打开高级补给包" : "打开普通补给包", openCrate(state, crate));
             setShowCrate(true);
           }}
+          onUse={(itemId) => applyAction("使用物品", useUtilityItem(state, itemId))}
           onDecorate={(itemId) => applyAction("布置家具", itemId === "furnitureTicket" ? decorate(state) : placeInventoryFurniture(state, itemId))}
         />
       )}
@@ -1655,6 +1657,14 @@ const itemDetailText: Partial<Record<ItemId, { description: string; use: string;
   commonCrate: { description: "海上漂来的普通补给包。", use: "可以打开获得多件生活物资。", effect: "掉落基础材料、食物、小工具或少量稀有物。" },
   premiumCrate: { description: "包得更严实的高级补给包。", use: "可以打开获得更多补给。", effect: "更容易出现高级材料、家具、装备和稀有物。" },
   furnitureTicket: { description: "一张可以换来随机家具的券。", use: "点击布置，为海上小屋增加家具。", effect: "布置后 Mood 提升。" },
+  wetWipes: { description: "随手擦去海风和黏腻。", use: "在背包详情中直接使用。", effect: "Mood +4；高温天气 Mood +6。" },
+  lighter: { description: "可靠的防风打火机。", use: "拥有后烤鱼类料理自动少消耗 1 块木板。", effect: "寒潮时也会帮助降低 Mood 损失。" },
+  tarp: { description: "能挡雨、遮阳的防水布。", use: "暴雨、风暴或高温时自动消耗。", effect: "减少 Boat HP 或 Mood 损失。" },
+  repairTape: { description: "专门用于加固木筏裂缝的胶带。", use: "修理载具时自动消耗 1 个。", effect: "本次修理额外 Boat HP +12。" },
+  soap: { description: "小小一块肥皂，也能让海上生活整洁一点。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
+  toothbrush: { description: "认真刷牙，是漂流生活的仪式感。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
+  toothpaste: { description: "一点清新的味道。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
+  medkit: { description: "简单处理疲惫和擦伤的药包。", use: "Hunger 或 Mood 偏低时可使用。", effect: "Hunger +15，Mood +8。" },
 };
 
 function getItemDetail(itemId: ItemId) {
@@ -1674,6 +1684,7 @@ function ItemDetailModal({
   onEat,
   onFeedCat,
   onOpenCrate,
+  onUse,
   onDecorate,
 }: {
   state: GameState;
@@ -1682,6 +1693,7 @@ function ItemDetailModal({
   onEat: (itemId: ItemId) => void;
   onFeedCat: (optionId: string) => void;
   onOpenCrate: (crate: "commonCrate" | "premiumCrate") => void;
+  onUse: (itemId: ItemId) => void;
   onDecorate: (itemId: ItemId) => void;
 }) {
   const detail = getItemDetail(itemId);
@@ -1690,6 +1702,7 @@ function ItemDetailModal({
   const food = foodItems.find((item) => item.id === itemId);
   const catOption = getCatFeedOptions(state).find((option) => option.itemId === itemId);
   const crate = itemId === "commonCrate" || itemId === "premiumCrate" ? itemId : undefined;
+  const usableItemIds: ItemId[] = ["wetWipes", "soap", "toothbrush", "toothpaste", "medkit"];
   const furnitureIds: ItemId[] = ["furnitureTicket", "foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox"];
   const equipmentActive = state.equipment.includes(itemId) || (itemId === "advancedRodItem" && state.equipment.includes("advancedRod"));
 
@@ -1722,6 +1735,7 @@ function ItemDetailModal({
           {food && <button className="primary-action" onClick={() => runAndClose(() => onEat(itemId))}>使用 / 食用</button>}
           {catOption && <button onClick={() => runAndClose(() => onFeedCat(catOption.id))}>喂猫</button>}
           {crate && <button className="primary-action" onClick={() => runAndClose(() => onOpenCrate(crate))}>打开礼包</button>}
+          {usableItemIds.includes(itemId) && <button className="primary-action" onClick={() => runAndClose(() => onUse(itemId))}>使用</button>}
           {furnitureIds.includes(itemId) && <button onClick={() => runAndClose(() => onDecorate(itemId))}>布置</button>}
           {category === "equipment" && <button disabled>{equipmentActive ? "已装备" : "查看效果"}</button>}
           {category === "materials" && <button disabled>材料会在制作/升级时使用</button>}

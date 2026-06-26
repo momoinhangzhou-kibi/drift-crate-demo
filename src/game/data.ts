@@ -24,6 +24,8 @@ export const itemNames: Record<ItemId, string> = {
   sanitaryPad: "卫生巾",
   towel: "毛巾",
   soap: "肥皂",
+  toothbrush: "牙刷",
+  toothpaste: "牙膏",
   medkit: "简易药包",
   sturdyRod: "结实钓鱼竿",
   advancedRodItem: "高级钓鱼竿",
@@ -87,6 +89,8 @@ export const itemEmoji: Record<ItemId, string> = {
   sanitaryPad: "🌸",
   towel: "🧺",
   soap: "🫧",
+  toothbrush: "牙刷",
+  toothpaste: "牙膏",
   medkit: "💊",
   sturdyRod: "🎣",
   advancedRodItem: "🎣",
@@ -133,7 +137,7 @@ export const itemMeta: Record<ItemId, ItemMeta> = Object.fromEntries(
   (Object.keys(itemNames) as ItemId[]).map((id) => {
     const food = ["water", "biscuit", "cannedFood", "ramen", "chocolate", "compressedBiscuit", "grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot", "grilledFishSkewer", "seafoodSoup", "shrimpRiceBall", "cannedRamen", "warmFishSoup", "searedTuna", "rainbowSashimi", "survivorFeast"].includes(id);
     const tools = ["wrench", "lighter", "flashlight", "toolbox", "repairTape"].includes(id);
-    const hygiene = ["toiletPaper", "wetWipes", "sanitaryPad", "towel", "soap", "medkit"].includes(id);
+    const hygiene = ["toiletPaper", "wetWipes", "sanitaryPad", "towel", "soap", "toothbrush", "toothpaste", "medkit"].includes(id);
     const furniture = ["foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox", "furnitureTicket"].includes(id);
     const equipment = ["sturdyRod", "advancedRodItem", "fishingNet", "waterproofBackpack", "solarPurifier", "autoFisher"].includes(id);
     const special = ["commonCrate", "premiumCrate", "mysteryBottle", "luckyShell", "merchantCoupon"].includes(id);
@@ -150,7 +154,7 @@ export const shopCatalog: ShopItem[] = [
   ["wood", 5, 5], ["plastic", 6, 5], ["rope", 8, 4], ["scrap", 18, 3], ["screw", 14, 3], ["tarp", 22, 2], ["tape", 10, 3],
   ["water", 10, 4], ["biscuit", 12, 3], ["cannedFood", 22, 2], ["ramen", 18, 2], ["chocolate", 16, 2], ["compressedBiscuit", 20, 2],
   ["wrench", 35, 1], ["lighter", 26, 1], ["flashlight", 32, 1], ["toolbox", 80, 1], ["repairTape", 24, 2],
-  ["toiletPaper", 8, 2], ["wetWipes", 12, 2], ["sanitaryPad", 12, 2], ["towel", 16, 1], ["soap", 10, 2], ["medkit", 40, 1],
+  ["toiletPaper", 8, 2], ["wetWipes", 12, 2], ["sanitaryPad", 12, 2], ["towel", 16, 1], ["soap", 10, 2], ["toothbrush", 9, 2], ["toothpaste", 11, 2], ["medkit", 40, 1],
   ["sturdyRod", 70, 1], ["advancedRodItem", 160, 1], ["fishingNet", 90, 1], ["waterproofBackpack", 100, 1], ["solarPurifier", 180, 1], ["autoFisher", 220, 1],
   ["foldingChair", 45, 1], ["shellLamp", 85, 1], ["waterproofMattress", 80, 1], ["simpleToilet", 100, 1], ["storageBox", 70, 1],
   ["commonCrate", 30, 3], ["premiumCrate", 100, 1], ["mysteryBottle", 45, 1], ["luckyShell", 120, 1], ["merchantCoupon", 60, 1],
@@ -282,6 +286,8 @@ export const initialInventory: Record<ItemId, number> = {
   sanitaryPad: 0,
   towel: 0,
   soap: 0,
+  toothbrush: 0,
+  toothpaste: 0,
   medkit: 0,
   sturdyRod: 0,
   advancedRodItem: 0,
@@ -438,6 +444,10 @@ export function createShopStock(day: number): ShopItem[] {
   const pool = shopCatalog.filter((item) => early ? ["materials", "food", "hygiene", "tools", "special"].includes(item.category) && item.rarity !== "Epic" : true);
   const picked = pool.filter((item) => rand() < (item.rarity === "Epic" ? 0.18 : item.rarity === "Rare" ? 0.35 : 0.55)).slice(0, early ? 10 : 14);
   const guaranteed = shopCatalog.filter((item) => item.id === "commonCrate" || (!early && item.id === "premiumCrate"));
+  if (rand() < (early ? 0.12 : 0.2)) {
+    const furnitureTicket = shopCatalog.find((item) => item.id === "furnitureTicket");
+    if (furnitureTicket) guaranteed.push({ ...furnitureTicket, quantity: 1 });
+  }
   const merged = [...guaranteed, ...(picked.length ? picked : pool.slice(0, early ? 10 : 14))].filter(
     (item, index, list) => list.findIndex((candidate) => candidate.id === item.id) === index,
   );

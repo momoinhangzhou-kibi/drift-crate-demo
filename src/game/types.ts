@@ -22,6 +22,8 @@ export type ItemId =
   | "sanitaryPad"
   | "towel"
   | "soap"
+  | "toothbrush"
+  | "toothpaste"
   | "medkit"
   | "sturdyRod"
   | "advancedRodItem"

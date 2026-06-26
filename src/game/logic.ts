@@ -171,7 +171,8 @@ function getFishCandidates(state: GameState, recipe: Recipe) {
 function getEffectiveRecipeCost(state: GameState, recipe: Recipe) {
   const cost = { ...recipe.fixedCost };
   const grillHelps = state.equipment.includes("grill") && ["grilled-fish", "grilled-fish-skewer", "seafood-skewer"].includes(recipe.id);
-  if (grillHelps && cost.wood) cost.wood = Math.max(0, cost.wood - 1);
+  const lighterHelps = state.inventory.lighter > 0 && ["grilled-fish", "grilled-fish-skewer", "seafood-skewer"].includes(recipe.id);
+  if ((grillHelps || lighterHelps) && cost.wood) cost.wood = Math.max(0, cost.wood - 1);
   return cost;
 }
 
@@ -419,18 +420,24 @@ export function fish(state: GameState): GameState {
 export function salvage(state: GameState): GameState {
   if (state.hunger <= 0) return addLog(state, "warning", "体力不足", "你没有力气打捞了，肚子正在抗议。");
 
-  const loot = pick([
-    ["wood", randomInt(2, 5)],
-    ["plastic", randomInt(1, 4)],
-    ["rope", randomInt(1, 2)],
-    ["scrap", 1],
-    ["water", 1],
-    ["veggiePack", 1],
-    ["meatSlices", 1],
-  ] as [ItemId, number][]);
+  const salvagePool: [ItemId, number][] = [
+    ["wood", randomInt(2, 5)], ["wood", randomInt(2, 5)], ["wood", randomInt(2, 5)],
+    ["plastic", randomInt(1, 4)], ["plastic", randomInt(1, 4)], ["plastic", randomInt(1, 4)],
+    ["rope", randomInt(1, 2)], ["rope", randomInt(1, 2)],
+    ["scrap", 1], ["scrap", 1], ["tape", 1], ["repairTape", 1],
+    ["cannedFood", 1], ["biscuit", 1], ["veggiePack", 1], ["commonCrate", 1],
+  ];
+  if (state.day >= 5) salvagePool.push(["furnitureTicket", 1]);
+  const loot = pick(salvagePool);
 
   let next = addItem({ ...state, hunger: clamp(state.hunger - 4), mood: clamp(state.mood + 1) }, loot[0], loot[1]);
   const rewards = [`${itemNames[loot[0]]} x${loot[1]}`];
+  if (Math.random() < 0.08) {
+    const shrimp = fishList.find((fishItem) => fishItem.id === "clear-shrimp") ?? fishList[0];
+    const result = addFish(next, shrimp, 1);
+    next = result.state;
+    rewards.push(`${shrimp.emoji} ${shrimp.name} x1`);
+  }
   if (state.equipment.includes("waterproofBackpack") && Math.random() < 0.28) {
     const extra = pick(["wood", "plastic", "rope", "tape"] as ItemId[]);
     next = addItem(next, extra, 1);
@@ -471,7 +478,10 @@ export function openCrate(state: GameState, crate: "commonCrate" | "premiumCrate
 
   for (let i = 0; i < drops; i += 1) {
     const rarity = rollCardRarity(state, crate === "premiumCrate");
-    const card = pick(cards.filter((item) => item.rarity === rarity));
+    const rarityCards = cards.filter((item) => item.rarity === rarity);
+    const card = crate === "premiumCrate" && rarity === "Rare" && Math.random() < 0.28
+      ? cards.find((item) => item.id === "furniture-ticket") ?? pick(rarityCards)
+      : pick(rarityCards);
     bestRarity = ["Common", "Rare", "Epic", "Legendary"].indexOf(rarity) > ["Common", "Rare", "Epic", "Legendary"].indexOf(bestRarity) ? rarity : bestRarity;
     if (card.itemId && card.amount) {
       next = addItem(next, card.itemId, card.amount);
@@ -644,6 +654,31 @@ export function eatFood(state: GameState, foodId: ItemId): GameState {
   );
 }
 
+export function useUtilityItem(state: GameState, itemId: ItemId): GameState {
+  if ((state.inventory[itemId] ?? 0) <= 0) return addLog(state, "warning", "使用物品", `背包里没有${itemNames[itemId]}。`);
+
+  const highTemperature = state.weather === "高温";
+  const moodItems: Partial<Record<ItemId, { mood: number; message: string }>> = {
+    wetWipes: { mood: highTemperature ? 6 : 4, message: highTemperature ? "湿巾带走了暑气。" : "擦了擦脸，整个人清爽多了。" },
+    soap: { mood: 2, message: "洗去海盐和疲惫，心情也轻了一点。" },
+    toothbrush: { mood: 2, message: "认真刷了牙，漂流生活也要保持仪式感。" },
+    toothpaste: { mood: 2, message: "清新的味道让你精神了一点。" },
+  };
+  const moodItem = moodItems[itemId];
+  if (moodItem) {
+    const next = addItem(state, itemId, -1);
+    return addLog({ ...next, mood: clamp(next.mood + moodItem.mood) }, "event", "使用物品", `${moodItem.message} Mood +${moodItem.mood}。`, [`${itemNames[itemId]} x-1`, `Mood +${moodItem.mood}`]);
+  }
+
+  if (itemId === "medkit") {
+    if (state.hunger >= 55 && state.mood >= 55) return addLog(state, "warning", "简易药包", "你现在状态还不错，先把药包留着吧。");
+    const next = addItem(state, itemId, -1);
+    return addLog({ ...next, hunger: clamp(next.hunger + 15), mood: clamp(next.mood + 8) }, "event", "使用简易药包", "简单处理了一下疲惫和擦伤。Hunger +15，Mood +8。", ["简易药包 x-1", "Hunger +15", "Mood +8"]);
+  }
+
+  return addLog(state, "warning", "使用物品", `${itemNames[itemId]}需要在对应场景中自动生效。`);
+}
+
 export function noteNoFood(state: GameState): GameState {
   return addLog(state, "warning", "进食", "你翻了翻背包，但没有可以吃的东西。");
 }
@@ -732,7 +767,7 @@ function triggerCatEvent(state: GameState, source: "explore" | "daily", stormy =
   const choices = [
     { id: "material", weight: 24 + (cat.type === "calico" ? 18 : 0) },
     { id: "coins", weight: 18 + (cat.type === "calico" ? 8 : 0) },
-    { id: "ticket", weight: 4 + (cat.type === "calico" ? 5 : 0) },
+    { id: "ticket", weight: 6 + (cat.type === "calico" ? 8 : 0) },
     { id: "fish", weight: 18 + (cat.type === "cow" ? 4 : 0) },
     { id: "mood", weight: 16 + (cat.type === "cow" ? 12 : 0) },
     { id: "mystery", weight: 6 + (cat.type === "black" ? 16 : 0) },
@@ -839,9 +874,11 @@ export function repairBoat(state: GameState): GameState {
   if (state.boatHp >= state.boatMaxHp) return addLog(state, "warning", "无需修理", "载具耐久已经是满的，先把材料留着吧。");
   if (missing.length) return addLog(state, "warning", "材料不足", `修理载具还缺：${missing.join("、")}。`);
 
-  const next = spendItems(state, cost);
-  const repairValue = hasToolbox ? 32 : 20;
-  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + repairValue), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", `你敲敲补补修好了载具。${hasToolbox ? "工具箱让修理更顺手。" : ""}`, [`Boat HP +${repairValue}`]);
+  let next = spendItems(state, cost);
+  const usedRepairTape = next.inventory.repairTape > 0;
+  if (usedRepairTape) next = addItem(next, "repairTape", -1);
+  const repairValue = (hasToolbox ? 32 : 20) + (usedRepairTape ? 12 : 0);
+  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + repairValue), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", `你敲敲补补修好了载具。${hasToolbox ? "工具箱让修理更顺手。" : ""}${usedRepairTape ? "修理胶带加固了关键裂缝。" : ""}`, [`Boat HP +${repairValue}`, ...(usedRepairTape ? ["修理胶带 x-1"] : [])]);
 }
 
 export function placeInventoryFurniture(state: GameState, itemId: ItemId): GameState {
