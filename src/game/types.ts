@@ -111,6 +111,7 @@ export interface CatOption {
   defaultName: string;
   breed: string;
   emoji: string;
+  iconClass: string;
   personality: string;
   bonus: string;
   recommended?: boolean;
@@ -121,6 +122,7 @@ export interface CatState {
   name: string;
   breed: string;
   emoji: string;
+  iconClass: string;
   intimacy: number;
   satiety: number;
   mood: number;

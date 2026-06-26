@@ -34,7 +34,7 @@ import {
   upgradeBoat,
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
-import { CatFeedOption, CatType, Fish, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, ShopItem, TalentId } from "./game/types";
+import { CatFeedOption, CatOption, CatState, CatType, Fish, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
   "wood",
@@ -86,9 +86,9 @@ type MusicMode = "random" | string;
 
 const MUSIC_SETTINGS_KEY = "drift-crate-music-settings";
 const musicTracks: MusicTrack[] = [
-  { id: "ocean-cozy-1", name: "海风小屋", file: "/assets/audio/ocean-cozy-1.mp3", description: "温暖、治愈，适合整理海上小家。" },
-  { id: "ocean-cozy-2", name: "漂流午后", file: "/assets/audio/ocean-cozy-2.mp3", description: "轻松午后感，适合钓鱼和开箱。" },
-  { id: "ocean-cozy-3", name: "轻快海浪", file: "/assets/audio/ocean-cozy-3.mp3", description: "更活泼的海浪节奏，适合经营补给站。" },
+  { id: "ocean-cozy-1", name: "海风小屋", file: `${import.meta.env.BASE_URL}assets/audio/ocean-cozy-1.mp3`, description: "温暖、治愈，适合整理海上小家。" },
+  { id: "ocean-cozy-2", name: "漂流午后", file: `${import.meta.env.BASE_URL}assets/audio/ocean-cozy-2.mp3`, description: "轻松午后感，适合钓鱼和开箱。" },
+  { id: "ocean-cozy-3", name: "轻快海浪", file: `${import.meta.env.BASE_URL}assets/audio/ocean-cozy-3.mp3`, description: "更活泼的海浪节奏，适合经营补给站。" },
 ];
 
 const equipmentNames: Record<string, string> = {
@@ -500,7 +500,7 @@ function App() {
                 <div className="boat-body">{boatNames[state.boatLevel]}</div>
                 <div className="furniture-strip">{state.furniture.slice(0, 6).map((item) => <span key={item}>{furnitureIcon(item)}</span>)}</div>
                 <div className="stage-cat" title={`${state.cat.name} / ${state.cat.breed}`}>
-                  <span>{state.cat.emoji}</span>
+                  <CatIcon cat={state.cat} />
                   <small>{state.cat.name}</small>
                 </div>
                 <div className="waves">≈≈≈≈≈≈≈≈≈≈≈</div>
@@ -537,7 +537,7 @@ function App() {
               🍽 进食
             </ActionButton>
             <ActionButton onClick={() => setActivePanel("shop")}>🛒 商店</ActionButton>
-            <ActionButton onClick={() => setActivePanel("cat")}>🐈 猫猫</ActionButton>
+            <ActionButton onClick={() => setActivePanel("cat")}>猫 猫猫</ActionButton>
             <ActionButton badge={readyToDecorate ? "可布置" : undefined} onClick={() => applyAction("布置家具", decorate(state))}>
               🪑 布置家具
             </ActionButton>
@@ -800,9 +800,9 @@ function buildFeedback(title: string, before: GameState, after: GameState): Feed
   addNumberDiff("😊 Mood", before.mood, after.mood, stats);
   addNumberDiff("🛶 Boat HP", before.boatHp, after.boatHp, stats);
   addNumberDiff("📅 Day", before.day, after.day, stats);
-  addNumberDiff("🐈 猫饱腹", before.cat?.satiety ?? 0, after.cat?.satiety ?? 0, stats);
-  addNumberDiff("🐾 猫亲密", before.cat?.intimacy ?? 0, after.cat?.intimacy ?? 0, stats);
-  addNumberDiff("😺 猫心情", before.cat?.mood ?? 0, after.cat?.mood ?? 0, stats);
+  addNumberDiff("猫饱腹", before.cat?.satiety ?? 0, after.cat?.satiety ?? 0, stats);
+  addNumberDiff("猫亲密", before.cat?.intimacy ?? 0, after.cat?.intimacy ?? 0, stats);
+  addNumberDiff("猫心情", before.cat?.mood ?? 0, after.cat?.mood ?? 0, stats);
   if (before.boatLevel !== after.boatLevel) {
     stats.push({ label: `🚤 Boat Lv ${before.boatLevel} → ${after.boatLevel}` });
   }
@@ -940,15 +940,23 @@ function FeedbackSection({ title, tone, lines }: { title: string; tone: "gain" |
   );
 }
 
+function CatIcon({ cat, size = "normal" }: { cat: Pick<CatState | CatOption, "iconClass" | "breed">; size?: "normal" | "large" }) {
+  return (
+    <span className={`cat-css-icon ${cat.iconClass} ${size === "large" ? "large" : ""}`} aria-label={cat.breed} role="img">
+      <span className="cat-css-face" aria-hidden="true"></span>
+    </span>
+  );
+}
+
 const moduleItems: { id: ModulePanel; icon: string; label: string }[] = [
-  { id: "inventory", icon: "📦", label: "背包" },
-  { id: "shop", icon: "🛒", label: "商店" },
-  { id: "dex", icon: "🐟", label: "图鉴" },
-  { id: "recipes", icon: "🍳", label: "菜谱" },
-  { id: "journal", icon: "📖", label: "日记" },
-  { id: "cat", icon: "🐈", label: "猫猫" },
-  { id: "home", icon: "🪑", label: "家具" },
-  { id: "settings", icon: "⚙", label: "设置" },
+  { id: "inventory", icon: "箱", label: "背包" },
+  { id: "shop", icon: "店", label: "商店" },
+  { id: "dex", icon: "鱼", label: "图鉴" },
+  { id: "recipes", icon: "锅", label: "菜谱" },
+  { id: "journal", icon: "日", label: "日记" },
+  { id: "cat", icon: "猫", label: "猫猫" },
+  { id: "home", icon: "家", label: "家具" },
+  { id: "settings", icon: "设", label: "设置" },
 ];
 
 function ModuleMenu({ activePanel, onOpen, hasNewFish }: { activePanel?: ModulePanel; onOpen: (panel: ModulePanel) => void; hasNewFish: boolean }) {
@@ -1132,7 +1140,7 @@ function CatPanelContent({ state, onFeed }: { state: GameState; onFeed: (optionI
   return (
     <div className="module-stack">
       <div className="cat-status-card">
-        <span className="cat-big-emoji">{cat.emoji}</span>
+        <CatIcon cat={cat} size="large" />
         <div>
           <strong>{cat.name} / {cat.breed}</strong>
           <p>{cat.todayEvent ?? "猫猫正安静地待在木筏旁边。"}</p>
@@ -1161,7 +1169,7 @@ function TitleScreen({ saveSummary, hasActiveRun, onNewGame, onContinue, onLoadM
   const info = getSurvivalInfo(snapshot);
   return (
     <main className="title-screen">
-      <img className="title-cover-image" src="/assets/title-bg.png" alt="漂流补给箱标题封面" />
+      <img className="title-cover-image" src={`${import.meta.env.BASE_URL}assets/title-bg.png`} alt="漂流补给箱标题封面" />
       <div className="title-cover-vignette" aria-hidden="true"></div>
       <section className="title-menu-card">
         <div className="version-pill">当前版本 v0.4.1</div>
@@ -1298,7 +1306,7 @@ function CatSelectScreen({ onBack, onChoose }: { onBack: () => void; onChoose: (
           {catOptions.map((cat) => (
             <button className={`cat-choice-card ${cat.recommended ? "recommended" : ""}`} key={cat.type} onClick={() => setSelectedCat(cat)}>
               {cat.recommended && <span className="item-badge">推荐</span>}
-              <span className="cat-choice-emoji">{cat.emoji}</span>
+              <CatIcon cat={cat} size="large" />
               <strong>{cat.defaultName}</strong>
               <small>{cat.breed}</small>
               <p>{cat.personality}</p>
@@ -1311,7 +1319,7 @@ function CatSelectScreen({ onBack, onChoose }: { onBack: () => void; onChoose: (
       {selectedCat && (
         <div className="modal-backdrop" onClick={() => setSelectedCat(undefined)}>
           <section className="crate-modal cat-confirm-modal" onClick={(event) => event.stopPropagation()}>
-            <span className="modal-emoji">{selectedCat.emoji}</span>
+            <CatIcon cat={selectedCat} size="large" />
             <p className="eyebrow">确认猫猫伙伴</p>
             <h2>{selectedCat.defaultName}</h2>
             <p><strong>{selectedCat.breed}</strong></p>
@@ -1338,12 +1346,12 @@ function CatModal({ state, onClose, onFeed }: { state: GameState; onClose: () =>
         <div className="modal-heading">
           <div>
             <p className="eyebrow">Cat Companion</p>
-            <h2>{cat.emoji} {cat.name}</h2>
+            <h2>猫 {cat.name}</h2>
           </div>
           <button className="compact-button" onClick={onClose}>关闭</button>
         </div>
         <div className="cat-status-card">
-          <span className="cat-big-emoji">{cat.emoji}</span>
+          <CatIcon cat={cat} size="large" />
           <div>
             <strong>{cat.name} / {cat.breed}</strong>
             <p>{cat.todayEvent ?? "猫猫正安静地待在木筏旁边。"}</p>

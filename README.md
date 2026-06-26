@@ -88,3 +88,10 @@ src/
 ## 已知环境备注
 
 如果公司网络拦截 npm registry，安装依赖时可能会看到 `EACCES` 或 fetch failed。这通常表示网络策略阻止访问包仓库，不代表项目代码有问题。
+
+## 发布与浏览器
+
+- Vercel: https://drift-crate-demo.vercel.app/ （如果 Vercel 项目绑定了其它域名，请以 Vercel Dashboard 显示为准）
+- GitHub Pages: https://momoinhangzhou-kibi.github.io/drift-crate-demo/
+- 推荐浏览器：最新版 Chrome / Edge / Safari。
+- GitHub Pages 首次启用时，需要在仓库 `Settings -> Pages -> Build and deployment` 中把 `Source` 设置为 `GitHub Actions`。

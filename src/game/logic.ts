@@ -948,6 +948,7 @@ function migrateCat(rawCat: Partial<CatState> | undefined): CatState {
     name: rawCat?.name || fallback.name,
     breed: rawCat?.breed || fallback.breed,
     emoji: rawCat?.emoji || fallback.emoji,
+    iconClass: rawCat?.iconClass || fallback.iconClass,
     intimacy: clamp(rawCat?.intimacy ?? fallback.intimacy),
     satiety: clamp(rawCat?.satiety ?? fallback.satiety),
     mood: clamp(rawCat?.mood ?? fallback.mood),
