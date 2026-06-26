@@ -14,6 +14,7 @@ import {
   itemMeta,
   itemNames,
   recipes,
+  talents,
   upgradeRequirements,
   weatherList,
 } from "./data";
@@ -252,6 +253,12 @@ function weightedRarity(state: GameState): FishRarity {
     weights.Epic += 1.5;
     weights.Legendary += 0.5;
   }
+  if (state.mood >= 80) {
+    weights.Common -= 3;
+    weights.Rare += 2;
+    weights.Epic += 0.8;
+    weights.Legendary += 0.2;
+  }
   if (state.equipment.includes("sturdyRod")) {
     weights.Common -= 4;
     weights.Uncommon += 3;
@@ -383,7 +390,7 @@ export function getSurvivalInfo(state: GameState) {
   const nextDisasterIn = state.day < 7 ? 7 - state.day : (7 - ((state.day - 7) % 7)) % 7;
   const hpRate = state.boatHp / state.boatMaxHp;
   const hungerState = state.hunger >= 60 ? "正常" : state.hunger >= 30 ? "饥饿" : state.hunger >= 10 ? "虚弱" : "濒危";
-  const moodState = state.mood >= 60 ? "正常" : state.mood >= 30 ? "低落" : state.mood >= 10 ? "崩溃边缘" : "精神崩溃风险";
+  const moodState = state.mood >= 80 ? "状态很好" : state.mood >= 60 ? "平稳" : state.mood >= 40 ? "有点低落" : state.mood >= 20 ? "疲惫" : "崩溃边缘";
   const boatState = hpRate >= 0.7 ? "稳定" : hpRate >= 0.4 ? "受损" : state.boatHp > 0 ? "严重受损" : "沉没";
   const danger = state.day <= 3 ? "低" : nextDisasterIn <= 2 && state.day >= 5 ? "高" : state.day <= 7 ? "中" : "中";
   return { phase, nextDisasterIn, danger, hungerState, moodState, boatState };
@@ -392,11 +399,36 @@ export function getSurvivalInfo(state: GameState) {
 export function startGame(talent: TalentId, catType: CatType = "black"): GameState {
   const cat = createCatState(catType);
   const baseState = createInitialState();
-  const state = { ...baseState, cat, mood: clamp(baseState.mood + (cat.type === "black" ? 3 : 0)) };
-  return addLog({ ...state, started: true, talent, tradePrices: createLegacyPrices(), fishPrices: createFishPrices(), shopStock: createShopStock(1) }, "event", "潮汐系统", "潮汐系统启动，今天的漂流生活开始了。", [], true);
+  const selectedTalent = talents.find((item) => item.id === talent) ?? talents[0];
+  let state: GameState = {
+    ...baseState,
+    cat,
+    mood: clamp(baseState.mood + (cat.type === "black" ? 3 : 0)),
+    started: true,
+    talent: selectedTalent.id,
+    tradePrices: createLegacyPrices(),
+    fishPrices: createFishPrices(),
+    shopStock: createShopStock(1),
+    equipment: [...new Set([...(selectedTalent.startingEquipment ?? [])])],
+  };
+  Object.entries(selectedTalent.startingItems ?? {}).forEach(([itemId, amount]) => {
+    state = addItem(state, itemId as ItemId, amount ?? 0);
+  });
+  (selectedTalent.startingFurniture ?? []).forEach((furniture) => {
+    if (!state.furniture.includes(furniture)) state = { ...state, furniture: [...state.furniture, furniture] };
+  });
+  const startingRewards = [
+    ...Object.entries(selectedTalent.startingItems ?? {}).map(([itemId, amount]) => `${itemNames[itemId as ItemId]} x${amount}`),
+    ...(selectedTalent.startingEquipment ?? []).map((item) => item === "grill" ? "海上烧烤架" : itemNames[item as ItemId] ?? "初始装备"),
+  ];
+  state = addLog(state, "event", "天赋选择", `选择了「${selectedTalent.name}」：${selectedTalent.description}`, startingRewards, true);
+  return addLog(state, "event", "潮汐系统", "潮汐系统启动，今天的漂流生活开始了。", [], true);
 }
 
 export function fish(state: GameState): GameState {
+  if (state.mood < 40 && Math.random() < 0.16) {
+    return addLog({ ...state, hunger: clamp(state.hunger - 3) }, "warning", "钓鱼失手", "心情太低落，鱼线在海面上空晃了一圈。Hunger -3。", ["Mood 低落：本次没有收获"]);
+  }
   if (state.hunger <= 0) return addLog(state, "warning", "体力不足", "你饿得头晕，先找点吃的再钓鱼吧。");
 
   const netBonus = state.equipment.includes("fishingNet") && Math.random() < 0.35 ? 2 : 1;
@@ -404,6 +436,9 @@ export function fish(state: GameState): GameState {
   const caught = pickFish(state);
   const result = addFish({ ...state, hunger: clamp(state.hunger - 5) }, caught, amount);
   let next = addLog(result.state, "fishing", "钓鱼", `你钓到了「${caught.name}」x${amount}。`, [`${caught.emoji} ${caught.name} x${amount}`], caught.rarity === "Epic" || caught.rarity === "Legendary");
+
+  if (state.mood >= 80) next = addLog(next, "event", "心情加成", "状态很好，钓鱼时更容易遇到稀有鱼。", ["Mood 加成：稀有鱼概率提升"]);
+  else if (state.talent === "fishing") next = addLog(next, "event", "天赋生效", "钓鱼高手生效：稀有鱼概率提升。", ["钓鱼高手"]);
 
   if (result.isNew) {
     next = addLog(next, "discovery", "新发现", `首次钓到「${caught.name}」！已加入钓鱼图鉴。`, [caught.rarity], true, true);
@@ -418,6 +453,9 @@ export function fish(state: GameState): GameState {
 }
 
 export function salvage(state: GameState): GameState {
+  if (state.mood < 40 && Math.random() < 0.14) {
+    return addLog({ ...state, hunger: clamp(state.hunger - 2) }, "warning", "打捞落空", "心情低落时没能抓稳漂流物。Hunger -2。", ["Mood 低落：本次没有收获"]);
+  }
   if (state.hunger <= 0) return addLog(state, "warning", "体力不足", "你没有力气打捞了，肚子正在抗议。");
 
   const salvagePool: [ItemId, number][] = [
@@ -428,10 +466,16 @@ export function salvage(state: GameState): GameState {
     ["cannedFood", 1], ["biscuit", 1], ["veggiePack", 1], ["commonCrate", 1],
   ];
   if (state.day >= 5) salvagePool.push(["furnitureTicket", 1]);
+  if (state.talent === "decorator") salvagePool.push(["furnitureTicket", 1]);
   const loot = pick(salvagePool);
 
   let next = addItem({ ...state, hunger: clamp(state.hunger - 4), mood: clamp(state.mood + 1) }, loot[0], loot[1]);
   const rewards = [`${itemNames[loot[0]]} x${loot[1]}`];
+  if (state.mood >= 80 && Math.random() < 0.2) {
+    const extra = pick(["wood", "plastic", "rope", "tape"] as ItemId[]);
+    next = addItem(next, extra, 1);
+    rewards.push(`${itemNames[extra]} x1`, "Mood 加成：额外材料");
+  }
   if (Math.random() < 0.08) {
     const shrimp = fishList.find((fishItem) => fishItem.id === "clear-shrimp") ?? fishList[0];
     const result = addFish(next, shrimp, 1);
@@ -449,7 +493,7 @@ export function salvage(state: GameState): GameState {
 
 function rollCardRarity(state: GameState, premium: boolean): Rarity {
   const roll = Math.random();
-  const lucky = state.talent === "lucky" ? 0.08 : 0;
+  const lucky = (state.talent === "lucky" ? 0.08 : 0) + (state.talent === "crateHunter" ? 0.06 : 0) + (state.mood >= 80 ? 0.035 : state.mood < 25 ? -0.035 : 0);
 
   if (premium) {
     if (roll < 0.1 + lucky) return "Legendary";
@@ -505,6 +549,9 @@ export function openCrate(state: GameState, crate: "commonCrate" | "premiumCrate
       rewards.push(card.furniture);
     }
   }
+
+  if (state.mood >= 80) next = addLog(next, "event", "心情加成", "状态很好，开箱好运概率提升。", ["Mood 加成：开箱好运"]);
+  else if (state.talent === "lucky" || state.talent === "crateHunter") next = addLog(next, "event", "天赋生效", `${state.talent === "lucky" ? "幸运漂流者" : "补给箱猎人"}生效：稀有掉落概率提升。`, ["开箱好运提升"]);
 
   return addLog(
     { ...next, lastCrateType: crate, lastCrateDrops: rewards, lastCrateLuck: luck, mood: clamp(next.mood + (bestRarity === "Legendary" ? 12 : bestRarity === "Epic" ? 8 : 3)) },
@@ -644,13 +691,14 @@ export function eatFood(state: GameState, foodId: ItemId): GameState {
       : `你吃掉了${food.name}。Hunger +${food.hunger}，Mood +${food.mood}。`;
 
   const hotpotTableBonus = state.furniture.includes("海上火锅桌") && food.mood > 0 ? 1 : 0;
+  const chefBonus = state.talent === "cooking" ? 3 : 0;
 
   return addLog(
-    { ...next, hunger: clamp(next.hunger + food.hunger), mood: clamp(next.mood + food.mood + hotpotTableBonus) },
+    { ...next, hunger: clamp(next.hunger + food.hunger + chefBonus), mood: clamp(next.mood + food.mood + hotpotTableBonus + chefBonus) },
     "cooking",
     "进食",
     hotpotTableBonus ? `${message} 海上火锅桌让这顿饭更有仪式感，Mood 额外 +1。` : message,
-    [`Hunger +${food.hunger}`, `Mood +${food.mood + hotpotTableBonus}`],
+    [`Hunger +${food.hunger + chefBonus}`, `Mood +${food.mood + hotpotTableBonus + chefBonus}`, ...(chefBonus ? ["海上料理人生效"] : [])],
   );
 }
 
@@ -706,9 +754,10 @@ export function feedCat(state: GameState, optionId: string): GameState {
   }
 
   const orangeBonus = cat.type === "orange" ? 1 : 0;
+  const catFriendBonus = state.talent === "catFriend" ? 2 : 0;
   next = updateCat({ ...next, mood: clamp(next.mood + option.playerMood) }, {
     satiety: cat.satiety + option.catSatiety + (cat.type === "orange" ? 5 : 0),
-    intimacy: cat.intimacy + option.catIntimacy + orangeBonus,
+    intimacy: cat.intimacy + option.catIntimacy + orangeBonus + catFriendBonus,
     mood: cat.mood + option.catMood + orangeBonus,
     todayEvent: `${cat.name} 刚刚吃了 ${option.label}，看起来很满足。`,
   });
@@ -718,7 +767,7 @@ export function feedCat(state: GameState, optionId: string): GameState {
     "event",
     "猫猫伙伴",
     `${cat.emoji} ${cat.name} 吃掉了 ${option.label} x1。猫猫饱腹 +${option.catSatiety}${cat.type === "orange" ? "，橘猫加成 +5" : ""}，亲密度 +${option.catIntimacy + orangeBonus}。你的心情 +${option.playerMood}。`,
-    [`${option.label} x1`, `猫饱腹 +${option.catSatiety}`, `亲密 +${option.catIntimacy + orangeBonus}`, `Mood +${option.playerMood}`],
+    [`${option.label} x1`, `猫饱腹 +${option.catSatiety}`, `亲密 +${option.catIntimacy + orangeBonus + catFriendBonus}`, `Mood +${option.playerMood}`, ...(catFriendBonus ? ["猫猫亲和生效：亲密 +2"] : [])],
     true,
   );
 }
@@ -765,14 +814,14 @@ function addCatFoundFish(state: GameState, fishId: string) {
 function triggerCatEvent(state: GameState, source: "explore" | "daily", stormy = false): GameState {
   const cat = state.cat ?? createCatState("black");
   const choices = [
-    { id: "material", weight: 24 + (cat.type === "calico" ? 18 : 0) },
-    { id: "coins", weight: 18 + (cat.type === "calico" ? 8 : 0) },
-    { id: "ticket", weight: 6 + (cat.type === "calico" ? 8 : 0) },
-    { id: "fish", weight: 18 + (cat.type === "cow" ? 4 : 0) },
-    { id: "mood", weight: 16 + (cat.type === "cow" ? 12 : 0) },
-    { id: "mystery", weight: 6 + (cat.type === "black" ? 16 : 0) },
+    { id: "material", weight: 24 + (cat.type === "calico" ? 18 : 0) + (state.mood >= 80 ? 3 : 0) },
+    { id: "coins", weight: 18 + (cat.type === "calico" ? 8 : 0) + (state.mood >= 80 ? 2 : 0) },
+    { id: "ticket", weight: 6 + (cat.type === "calico" ? 8 : 0) + (state.talent === "decorator" ? 4 : 0) },
+    { id: "fish", weight: 18 + (cat.type === "cow" ? 4 : 0) + (state.mood >= 80 ? 2 : 0) },
+    { id: "mood", weight: 16 + (cat.type === "cow" ? 12 : 0) + (state.talent === "catFriend" ? 6 : 0) },
+    { id: "mystery", weight: 6 + (cat.type === "black" ? 16 : 0) + (state.talent === "catFriend" ? 3 : 0) },
     { id: "hungry", weight: cat.type === "orange" && cat.satiety < 55 ? 12 : 3 },
-    { id: "nothing", weight: 18 },
+    { id: "nothing", weight: state.mood < 40 ? 25 : 18 },
   ];
 
   if (stormy && Math.random() < (cat.type === "black" && cat.intimacy > 35 ? 0.22 : 0.45)) {
@@ -861,7 +910,7 @@ export function upgradeBoat(state: GameState): GameState {
     "upgrade",
     "载具升级",
     `载具升级为「${nextLevel}级 ${nextLevel === 4 ? "海上小商铺" : nextLevel === 3 ? "小型漂流屋" : "加固木筏"}」！`,
-    ["Boat Max HP 提升", "Boat HP 部分恢复", "Mood +12"],
+    ["Boat Max HP 提升", "Boat HP 部分恢复", "Mood +12", ...(state.talent === "crafting" ? ["手作达人：升级材料已节省"] : [])],
     true,
   );
 }
@@ -869,6 +918,7 @@ export function upgradeBoat(state: GameState): GameState {
 export function repairBoat(state: GameState): GameState {
   const hasToolbox = state.inventory.toolbox > 0;
   const cost: Partial<Record<ItemId, number>> = hasToolbox ? { wood: 2 } : { wood: 3, scrap: 1 };
+  if (state.talent === "crafting" && cost.wood) cost.wood = Math.max(1, cost.wood - 1);
   const missing = describeMissingItems(state, cost);
 
   if (state.boatHp >= state.boatMaxHp) return addLog(state, "warning", "无需修理", "载具耐久已经是满的，先把材料留着吧。");
@@ -877,8 +927,8 @@ export function repairBoat(state: GameState): GameState {
   let next = spendItems(state, cost);
   const usedRepairTape = next.inventory.repairTape > 0;
   if (usedRepairTape) next = addItem(next, "repairTape", -1);
-  const repairValue = (hasToolbox ? 32 : 20) + (usedRepairTape ? 12 : 0);
-  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + repairValue), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", `你敲敲补补修好了载具。${hasToolbox ? "工具箱让修理更顺手。" : ""}${usedRepairTape ? "修理胶带加固了关键裂缝。" : ""}`, [`Boat HP +${repairValue}`, ...(usedRepairTape ? ["修理胶带 x-1"] : [])]);
+  const repairValue = (hasToolbox ? 32 : 20) + (usedRepairTape ? 12 : 0) + (state.talent === "repair" ? 8 : 0);
+  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + repairValue), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", `你敲敲补补修好了载具。${hasToolbox ? "工具箱让修理更顺手。" : ""}${usedRepairTape ? "修理胶带加固了关键裂缝。" : ""}${state.talent === "repair" ? "漂流维修工生效：额外修复了船体。" : ""}`, [`Boat HP +${repairValue}`, ...(usedRepairTape ? ["修理胶带 x-1"] : []), ...(state.talent === "repair" ? ["天赋加成：Boat HP +8"] : [])]);
 }
 
 export function placeInventoryFurniture(state: GameState, itemId: ItemId): GameState {
@@ -959,7 +1009,8 @@ function applyCatDay(state: GameState, stormy: boolean): GameState {
     next = addLog(next, "warning", "猫猫伙伴", `${next.cat.emoji} ${next.cat.name} 有点饿了，猫猫心情 -5。`, ["猫心情 -5"]);
   }
 
-  if (Math.random() < (next.cat.type === "calico" ? 0.42 : next.cat.type === "black" ? 0.34 : 0.28)) {
+  const catEventChance = (next.cat.type === "calico" ? 0.42 : next.cat.type === "black" ? 0.34 : 0.28) + (next.mood >= 80 ? 0.08 : 0) + (next.talent === "catFriend" ? 0.08 : 0);
+  if (Math.random() < catEventChance) {
     next = triggerCatEvent(next, "daily", stormy);
   }
 
@@ -1039,6 +1090,10 @@ function applyDisaster(state: GameState, weather: Weather): GameState {
   }
 
   boatLoss = Math.max(0, Math.round(boatLoss * boatShieldRate));
+  if (state.talent === "repair" && boatLoss > 0) {
+    boatLoss = Math.max(0, boatLoss - 3);
+    rewards.push("漂流维修工减免船体伤害 3");
+  }
   hungerLoss = Math.max(0, hungerLoss);
   moodLoss = Math.max(0, moodLoss);
   next = updateCat(next, { mood: next.cat.mood - catMoodLoss, todayEvent: `${next.cat.name} 被${weather}吓得躲进了小屋角落。` });
@@ -1070,7 +1125,8 @@ export function endDay(state: GameState): GameState {
   const dailyFurnitureMood =
     (state.furniture.includes("迷你温泉") ? 2 : 0) +
     (state.furniture.includes("豪华沙发") ? 2 : 0) +
-    (state.furniture.includes("防水床垫") ? 1 : 0);
+    (state.furniture.includes("防水床垫") ? 1 : 0) +
+    (state.talent === "decorator" && state.furniture.length > 0 ? 2 : 0);
   let next: GameState = {
     ...state,
     day: state.day + 1,
@@ -1104,6 +1160,10 @@ export function endDay(state: GameState): GameState {
   }
 
   next = applyCatDay(next, disasterWeather.includes(nextWeather));
+
+  if (next.mood < 15 && Math.random() < 0.45) {
+    next = addLog({ ...next, mood: clamp(next.mood - 4) }, "warning", "情绪低潮", "海面安静得有些让人难过，Mood -4。找点食物、陪陪猫或布置小屋吧。", ["Mood -4"], true);
+  }
 
   const event = Math.random();
   if (event < 0.18) next = addLog(next, "event", "漂流瓶", "你发现漂流瓶，里面竟然有 20 贝壳币。", ["+20 贝壳币"]);

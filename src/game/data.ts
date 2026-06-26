@@ -161,10 +161,15 @@ export const shopCatalog: ShopItem[] = [
 ].map(([id, price, quantity]) => ({ id: id as ItemId, price: price as number, quantity: quantity as number, category: itemMeta[id as ItemId].category, rarity: itemMeta[id as ItemId].rarity }));
 
 export const talents: Talent[] = [
-  { id: "fishing", name: "钓鱼高手", emoji: "🎣", description: "稀有鱼和神秘鱼概率上升。" },
-  { id: "trading", name: "交易达人", emoji: "🛒", description: "卖鱼价格 +20%。" },
-  { id: "lucky", name: "幸运漂流者", emoji: "🍀", description: "开补给包时 Rare 以上概率上升。" },
-  { id: "crafting", name: "手作达人", emoji: "🔨", description: "载具升级需要的材料减少 20%。" },
+  { id: "fishing", name: "钓鱼高手", emoji: "🎣", description: "稀有鱼概率提升，钓鱼收获更好。", startingItems: { sturdyRod: 1 }, startingEquipment: ["sturdyRod"] },
+  { id: "trading", name: "交易达人", emoji: "🛒", description: "卖鱼价格更高，商店购买有优惠。", startingItems: { merchantCoupon: 1 } },
+  { id: "lucky", name: "幸运漂流者", emoji: "🍀", description: "开箱好运概率提升。", startingItems: { commonCrate: 2 } },
+  { id: "crafting", name: "手作达人", emoji: "🔨", description: "升级和修理更省材料。", startingItems: { toolbox: 1 } },
+  { id: "repair", name: "漂流维修工", emoji: "🧰", description: "修船恢复更多，灾害后更稳。", startingItems: { repairTape: 2, wrench: 1 } },
+  { id: "cooking", name: "海上料理人", emoji: "🍳", description: "料理恢复更多 Hunger 和 Mood。", startingItems: { cannedFood: 1 }, startingEquipment: ["grill"] },
+  { id: "catFriend", name: "猫猫亲和", emoji: "🐾", description: "喂猫亲密成长更快，好事件更多。", startingItems: { cannedFood: 2 } },
+  { id: "crateHunter", name: "补给箱猎人", emoji: "🎁", description: "补给包更容易出现稀有掉落。", startingItems: { commonCrate: 1, premiumCrate: 1 } },
+  { id: "decorator", name: "海上布置师", emoji: "🪑", description: "家具更能提振心情，家具券机会更高。", startingItems: { shellLamp: 1 } },
 ];
 
 export const catOptions: CatOption[] = [

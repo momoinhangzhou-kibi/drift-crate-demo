@@ -742,6 +742,24 @@ p {
   gap: 1rem;
 }
 
+.talent-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.55rem;
+  margin: 1rem 0 0.35rem;
+}
+
+.talent-mode-row button {
+  padding: 0.55rem 0.8rem;
+}
+
+.talent-mode-hint {
+  margin: 0 0 1rem;
+  color: #4f7181;
+  text-align: center;
+}
+
 .talent-card {
   min-height: 170px;
   display: flex;
@@ -757,6 +775,18 @@ p {
 
 .talent-card small {
   line-height: 1.5;
+}
+
+.talent-card em {
+  color: #27678a;
+  font-size: 0.78rem;
+  font-style: normal;
+  line-height: 1.4;
+}
+
+.talent-confirm-modal > span {
+  display: block;
+  font-size: 3rem;
 }
 
 .app-shell {

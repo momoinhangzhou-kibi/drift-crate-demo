@@ -95,13 +95,30 @@ type MusicTrack = {
 };
 
 type MusicMode = "random" | string;
+type TalentChoiceMode = "manual" | "random" | "three";
 
 const MUSIC_SETTINGS_KEY = "drift-crate-music-settings";
+const TALENT_CHOICE_MODE_KEY = "drift-crate-talent-choice-mode";
 const musicTracks: MusicTrack[] = [
   { id: "ocean-cozy-1", name: "海风小屋", file: `${import.meta.env.BASE_URL}assets/audio/ocean-cozy-1.mp3`, description: "温暖、治愈，适合整理海上小家。" },
   { id: "ocean-cozy-2", name: "漂流午后", file: `${import.meta.env.BASE_URL}assets/audio/ocean-cozy-2.mp3`, description: "轻松午后感，适合钓鱼和开箱。" },
   { id: "ocean-cozy-3", name: "轻快海浪", file: `${import.meta.env.BASE_URL}assets/audio/ocean-cozy-3.mp3`, description: "更活泼的海浪节奏，适合经营补给站。" },
 ];
+
+function readTalentChoiceMode(): TalentChoiceMode {
+  const saved = localStorage.getItem(TALENT_CHOICE_MODE_KEY);
+  return saved === "manual" || saved === "random" || saved === "three" ? saved : "three";
+}
+
+function drawTalents(amount: number) {
+  return [...talents].sort(() => Math.random() - 0.5).slice(0, amount);
+}
+
+function talentStartingText(talent: (typeof talents)[number]) {
+  const items = Object.entries(talent.startingItems ?? {}).map(([id, amount]) => `${itemNames[id as ItemId]} x${amount}`);
+  const equipment = (talent.startingEquipment ?? []).map((item) => item === "grill" ? "海上烧烤架" : displayName(item));
+  return [...items, ...equipment].join("、") || "无额外物资";
+}
 
 const equipmentNames: Record<string, string> = {
   oldRod: "旧钓鱼竿",
@@ -179,6 +196,11 @@ function App() {
   const [musicReady, setMusicReady] = useState(false);
   const [musicError, setMusicError] = useState<string | undefined>();
   const [pendingTalent, setPendingTalent] = useState<TalentId | undefined>();
+  const [talentMode, setTalentMode] = useState<TalentChoiceMode>(() => readTalentChoiceMode());
+  const [randomTalent, setRandomTalent] = useState(() => drawTalents(1)[0]);
+  const [threeTalents, setThreeTalents] = useState(() => drawTalents(3));
+  const [randomDrawCount, setRandomDrawCount] = useState(0);
+  const [showTalentConfirm, setShowTalentConfirm] = useState(false);
   const [inventoryFilter, setInventoryFilter] = useState<ItemCategory | "all">("all");
   const [sellFocusFishId, setSellFocusFishId] = useState<string | undefined>();
   const [recentExpanded, setRecentExpanded] = useState(false);
@@ -196,6 +218,7 @@ function App() {
   const discoveredCount = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
   const completion = Math.round((discoveredCount / fishList.length) * 100);
   const survival = getSurvivalInfo(state);
+  const talentsForMode = talentMode === "manual" ? talents : talentMode === "random" ? [randomTalent ?? talents[0]] : threeTalents;
 
   const pickMusicTrack = (excludeId?: string) => {
     const options = musicTracks.filter((track) => track.id !== excludeId);
@@ -309,11 +332,29 @@ function App() {
 
   const startNewGameFlow = () => {
     setPendingTalent(undefined);
+    setShowTalentConfirm(false);
+    setRandomDrawCount(0);
+    setRandomTalent(drawTalents(1)[0]);
+    setThreeTalents(drawTalents(3));
     setView("talentSelect");
+  };
+
+  const changeTalentMode = (mode: TalentChoiceMode) => {
+    setTalentMode(mode);
+    localStorage.setItem(TALENT_CHOICE_MODE_KEY, mode);
+    setRandomDrawCount(0);
+    setRandomTalent(drawTalents(1)[0]);
+    setThreeTalents(drawTalents(3));
   };
 
   const chooseTalent = (talent: TalentId) => {
     setPendingTalent(talent);
+    setShowTalentConfirm(true);
+  };
+
+  const confirmTalent = () => {
+    if (!pendingTalent) return;
+    setShowTalentConfirm(false);
     setView("catSelect");
   };
 
@@ -504,18 +545,31 @@ function App() {
             <p className="eyebrow">Drift Crate</p>
             <h1>漂流补给箱</h1>
             <p className="intro">选择一个初始天赋，带着小木筏、旧鱼竿和潮汐系统，开始你的海上小家计划。</p>
+            <div className="talent-mode-row">
+              <button className={talentMode === "three" ? "active-filter" : ""} onClick={() => changeTalentMode("three")}>推荐：随机三选一</button>
+              <button className={talentMode === "manual" ? "active-filter" : ""} onClick={() => changeTalentMode("manual")}>手动选择</button>
+              <button className={talentMode === "random" ? "active-filter" : ""} onClick={() => changeTalentMode("random")}>随机抽取</button>
+            </div>
+            <p className="talent-mode-hint">{talentMode === "three" ? "本局从三份漂流本领里，挑一份带上船。" : talentMode === "random" ? "让潮汐替你决定开局。" : "看看全部天赋，慢慢选一份最顺手的。"}</p>
             <div className="talent-grid">
-              {talents.map((talent) => (
+              {talentsForMode.map((talent) => (
                 <button className="talent-card" key={talent.id} onClick={() => chooseTalent(talent.id as TalentId)}>
                   <span>{talent.emoji}</span>
                   <strong>{talent.name}</strong>
                   <small>{talent.description}</small>
+                  <em>初始：{talentStartingText(talent)}</em>
                 </button>
               ))}
             </div>
+            {talentMode === "random" && <button className="compact-button" disabled={randomDrawCount >= 1} onClick={() => { setRandomTalent(drawTalents(1)[0]); setRandomDrawCount((count) => count + 1); }}>{randomDrawCount >= 1 ? "已重新抽取" : "重新抽取一次"}</button>}
             <button className="compact-button menu-back" onClick={() => setView("title")}>返回主菜单</button>
           </section>
         </main>
+        {showTalentConfirm && pendingTalent && (() => {
+          const talent = talents.find((item) => item.id === pendingTalent);
+          if (!talent) return null;
+          return <div className="modal-backdrop"><section className="crate-modal talent-confirm-modal"><span>{talent.emoji}</span><p className="eyebrow">确认开局天赋</p><h2>{talent.name}</h2><p>{talent.description}</p><p className="ready">初始物资：{talentStartingText(talent)}</p><div className="modal-actions"><button onClick={() => setShowTalentConfirm(false)}>再想想</button><button className="primary-action" onClick={confirmTalent}>确认并选择猫猫</button></div></section></div>;
+        })()}
       </>
     );
   }
