@@ -6,16 +6,20 @@ import {
   canUpgradeBoat,
   cookRecipe,
   decorate,
+  deleteSaveSlot,
   endDay,
   eatFood,
   exploreWithCat,
   feedCat,
+  autosaveGame,
+  getActiveSaveId,
   fish,
   getCatFeedOptions,
   getRecipeStatus,
   getMissingRequirements,
   getUpgradeCost,
   getSaveSummary,
+  getSaveSlots,
   getSurvivalInfo,
   hasEdibleFood,
   hasFishToSell,
@@ -31,12 +35,16 @@ import {
   removeFurniture,
   resetGame,
   salvage,
+  renameSaveSlot,
+  saveGame,
+  saveGameAs,
   saveGameWithLog,
   sellSelectedFish,
   startGame,
   upgradeBoat,
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
+import type { SaveSlot } from "./game/logic";
 import { CatFeedOption, CatOption, CatState, CatType, Fish, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
@@ -151,6 +159,9 @@ function App() {
   const [state, setState] = useState<GameState>(() => loadGame());
   const [view, setView] = useState<ViewState>("title");
   const [saveSummary, setSaveSummary] = useState(() => getSaveSummary());
+  const [saveSlots, setSaveSlots] = useState(() => getSaveSlots());
+  const [activeSaveId, setActiveSaveId] = useState(() => getActiveSaveId());
+  const [autoSaveNote, setAutoSaveNote] = useState<string | undefined>();
   const [showCrate, setShowCrate] = useState(false);
   const [showCooking, setShowCooking] = useState(false);
   const [showEating, setShowEating] = useState(false);
@@ -266,16 +277,36 @@ function App() {
     return () => audio.removeEventListener("ended", handleEnded);
   }, [musicMode, currentTrackId]);
 
-  const update = (next: GameState) => setState(next);
+  const refreshSaves = () => {
+    setSaveSummary(getSaveSummary());
+    setSaveSlots(getSaveSlots());
+    setActiveSaveId(getActiveSaveId());
+  };
+
+  const markAutosaved = () => {
+    setAutoSaveNote("已自动保存");
+    window.setTimeout(() => setAutoSaveNote(undefined), 1600);
+  };
+
+  const autoSaveIfPlaying = (next: GameState) => {
+    if (!next.started) return;
+    autosaveGame(next);
+    refreshSaves();
+    markAutosaved();
+  };
+
+  const update = (next: GameState) => {
+    setState(next);
+    autoSaveIfPlaying(next);
+  };
+
   const applyAction = (title: string, next: GameState) => {
     setFeedback(buildFeedback(title, state, next));
     setState(next);
+    autoSaveIfPlaying(next);
   };
 
-  const refreshSaveSummary = () => setSaveSummary(getSaveSummary());
-
   const startNewGameFlow = () => {
-    if (hasSavedGame() && !window.confirm("已经存在存档。开始新游戏不会立刻删除旧存档，但下次保存会覆盖当前进度。是否继续？")) return;
     setPendingTalent(undefined);
     setView("talentSelect");
   };
@@ -286,9 +317,14 @@ function App() {
   };
 
   const chooseCat = (catType: CatType) => {
-    setState(startGame(pendingTalent ?? "fishing", catType));
+    const next = startGame(pendingTalent ?? "fishing", catType);
+    const name = window.prompt("给这次漂流存档起个名字吧：", "漂流记录 Day 1")?.trim() || "漂流记录 Day 1";
+    saveGame(next, { asNew: true, name });
+    setState(next);
     setPendingTalent(undefined);
     setShowTutorial(true);
+    refreshSaves();
+    markAutosaved();
     setView("playing");
   };
 
@@ -303,8 +339,22 @@ function App() {
   const loadSavedGame = () => {
     if (!hasSavedGame()) return;
     setState(loadGameWithLog());
-    refreshSaveSummary();
+    refreshSaves();
     setView("playing");
+  };
+
+  const loadSaveSlot = (slotId: string) => {
+    if (!window.confirm("确定读取这个存档吗？当前未保存进度可能丢失。")) return;
+    setState(loadGameWithLog(slotId));
+    refreshSaves();
+    setView("playing");
+  };
+
+  const deleteSlot = (slotId: string) => {
+    const slot = saveSlots.find((item) => item.id === slotId);
+    if (!window.confirm(`确定删除「${slot?.name ?? "这个存档"}」吗？此操作不能撤销。`)) return;
+    deleteSaveSlot(slotId);
+    refreshSaves();
   };
 
   const openTitleLoad = () => {
@@ -318,7 +368,24 @@ function App() {
   const saveCurrentGame = () => {
     const next = saveGameWithLog(state);
     setState(next);
-    setSaveSummary(getSaveSummary());
+    refreshSaves();
+  };
+
+  const saveAsNewSlot = () => {
+    const name = window.prompt("新存档名称：", `漂流记录 Day ${state.day}`)?.trim() || `漂流记录 Day ${state.day}`;
+    saveGameAs(state, name);
+    refreshSaves();
+    setAutoSaveNote("已另存为新存档");
+    window.setTimeout(() => setAutoSaveNote(undefined), 1800);
+  };
+
+  const renameCurrentSlot = () => {
+    const slot = saveSlots.find((item) => item.id === activeSaveId);
+    if (!slot) return window.alert("当前没有可重命名的存档。");
+    const name = window.prompt("新的存档名称：", slot.name)?.trim();
+    if (!name) return;
+    renameSaveSlot(slot.id, name);
+    refreshSaves();
   };
 
   const resetCurrentGame = () => {
@@ -329,7 +396,7 @@ function App() {
     setActivePanel(undefined);
     setFeedback(undefined);
     update(resetGame());
-    refreshSaveSummary();
+    refreshSaves();
     setView("title");
   };
 
@@ -408,9 +475,11 @@ function App() {
       <>
         <audio ref={audioRef} preload="none" />
         <LoadScreen
-          saveSummary={saveSummary}
+          slots={saveSlots}
+          activeSaveId={activeSaveId}
           onBack={() => setView("title")}
-          onLoad={loadSavedGame}
+          onLoad={loadSaveSlot}
+          onDelete={deleteSlot}
         />
       </>
     );
@@ -462,6 +531,7 @@ function App() {
   return (
     <main className={`app-shell game-home weather-${state.weather}`}>
       <audio ref={audioRef} preload="none" />
+      {autoSaveNote && <div className="autosave-toast">{autoSaveNote}</div>}
       <header className="topbar game-topbar">
         <div>
           <p className="eyebrow">Drift Crate</p>
@@ -698,6 +768,12 @@ function App() {
           }}
           onNextTrack={playNextTrack}
           onSave={saveCurrentGame}
+          onSaveAs={saveAsNewSlot}
+          onRenameSave={renameCurrentSlot}
+          onLoadMenu={() => {
+            setActivePanel(undefined);
+            setView("loadMenu");
+          }}
           onReset={resetCurrentGame}
           onTitle={() => setView("title")}
         />
@@ -1017,6 +1093,9 @@ function GameModulePanel({
   onMusicModeChange,
   onNextTrack,
   onSave,
+  onSaveAs,
+  onRenameSave,
+  onLoadMenu,
   onReset,
   onTitle,
 }: {
@@ -1044,6 +1123,9 @@ function GameModulePanel({
   onMusicModeChange: (mode: MusicMode) => void;
   onNextTrack: () => void;
   onSave: () => void;
+  onSaveAs: () => void;
+  onRenameSave: () => void;
+  onLoadMenu: () => void;
   onReset: () => void;
   onTitle: () => void;
 }) {
@@ -1127,7 +1209,10 @@ function GameModulePanel({
                 <button onClick={onNextTrack}>下一首</button>
               </div>
             </div>
-            <button onClick={onSave}>保存游戏</button>
+            <button onClick={onSave}>保存当前存档</button>
+            <button onClick={onSaveAs}>另存为新存档</button>
+            <button onClick={onRenameSave}>重命名当前存档</button>
+            <button onClick={onLoadMenu}>读取存档</button>
             <button onClick={onTitle}>返回标题页</button>
             <button className="danger-button" onClick={onReset}>重置游戏</button>
           </div>
@@ -1309,27 +1394,59 @@ function TitleSettingsPanel({
   );
 }
 
-function LoadScreen({ saveSummary, onBack, onLoad }: { saveSummary: SaveSummary; onBack: () => void; onLoad: () => void }) {
+function LoadScreen({ slots, activeSaveId, onBack, onLoad, onDelete }: { slots: SaveSlot[]; activeSaveId?: string; onBack: () => void; onLoad: (slotId: string) => void; onDelete: (slotId: string) => void }) {
   return (
     <main className="start-screen">
       <section className="start-card load-card">
         <p className="eyebrow">Save Data</p>
         <h1>读取存档</h1>
-        <div className={`save-slot ${saveSummary.exists ? "filled" : "empty"}`}>
-          <div>
-            <strong>存档 1</strong>
-            {saveSummary.exists ? (
-              <p>Day {saveSummary.day} · Boat Lv.{saveSummary.boatLevel} · {saveSummary.coins} 🐚</p>
-            ) : (
-              <p>空存档，还没有保存过漂流生活。</p>
-            )}
-            {saveSummary.savedAt && <small>最后保存：{formatSaveTime(saveSummary.savedAt)}</small>}
-          </div>
-          <button disabled={!saveSummary.exists} onClick={onLoad}>读取</button>
+        <div className="save-slot-list">
+          {slots.length ? slots.map((slot) => (
+            <SaveSlotCard
+              key={slot.id}
+              slot={slot}
+              active={slot.id === activeSaveId}
+              onLoad={() => onLoad(slot.id)}
+              onDelete={() => onDelete(slot.id)}
+            />
+          )) : (
+            <div className="save-slot empty">
+              <strong>暂无存档</strong>
+              <p>开始新游戏后会自动创建本地存档。</p>
+            </div>
+          )}
         </div>
         <button className="compact-button menu-back" onClick={onBack}>返回主菜单</button>
       </section>
     </main>
+  );
+}
+
+function SaveSlotCard({ slot, active, onLoad, onDelete }: { slot: SaveSlot; active: boolean; onLoad: () => void; onDelete: () => void }) {
+  const summary = slot.summary;
+  return (
+    <article className={`save-slot-card ${active ? "active" : ""}`}>
+      <div>
+        <div className="save-slot-title">
+          <strong>{slot.name}</strong>
+          {active && <span className="new-pill">当前存档</span>}
+        </div>
+        <p>
+          Day {summary.day} · Boat Lv.{summary.boatLevel} · {summary.coins} 贝壳币 · 猫咪 {summary.catName ?? "未选择"}
+        </p>
+        <div className="save-slot-summary">
+          <span>Hunger {summary.hunger}</span>
+          <span>Mood {summary.mood}</span>
+          <span>Boat HP {summary.boatHp}/{summary.boatMaxHp}</span>
+          <span>图鉴 {summary.fishDexCompletion ?? 0}%</span>
+        </div>
+        {summary.savedAt && <small>最后保存：{formatSaveTime(summary.savedAt)}</small>}
+      </div>
+      <div className="save-slot-actions">
+        <button className="primary-action" onClick={onLoad}>读取</button>
+        <button className="danger-button" onClick={onDelete}>删除</button>
+      </div>
+    </article>
   );
 }
 
@@ -1439,9 +1556,9 @@ function SaveSummaryCard({ saveSummary }: { saveSummary: SaveSummary }) {
     <div className={`save-summary ${saveSummary.exists ? "filled" : "empty"}`}>
       <strong>{saveSummary.exists ? "已发现存档" : "暂无存档"}</strong>
       {saveSummary.exists ? (
-        <p>Day {saveSummary.day} · Boat Lv.{saveSummary.boatLevel} · {saveSummary.coins} 🐚{saveSummary.savedAt ? ` · ${formatSaveTime(saveSummary.savedAt)}` : ""}</p>
+        <p>{saveSummary.name ?? "漂流记录"} · Day {saveSummary.day} · Boat Lv.{saveSummary.boatLevel} · {saveSummary.coins} 🐚 · 猫咪 {saveSummary.catName ?? "未选择"}{saveSummary.savedAt ? ` · ${formatSaveTime(saveSummary.savedAt)}` : ""}</p>
       ) : (
-        <p>开始新游戏后，点击游戏内“保存游戏”即可写入本地存档。</p>
+        <p>开始新游戏后会自动写入本地存档。</p>
       )}
     </div>
   );

@@ -20,12 +20,22 @@ import {
 import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishRarity, GameState, ItemId, LogType, Rarity, Recipe, TalentId, TradePrices, Weather } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
+const SAVE_SLOTS_KEY = "drift-crate-save-slots";
+const ACTIVE_SAVE_ID_KEY = "drift-crate-active-save-id";
 
 export interface SaveSummary {
   exists: boolean;
+  id?: string;
+  name?: string;
   day?: number;
   boatLevel?: BoatLevel;
   coins?: number;
+  hunger?: number;
+  mood?: number;
+  boatHp?: number;
+  boatMaxHp?: number;
+  catName?: string;
+  fishDexCompletion?: number;
   savedAt?: string;
 }
 
@@ -33,6 +43,15 @@ interface SavePayload {
   version: 2;
   savedAt: string;
   state: GameState;
+}
+
+export interface SaveSlot {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  gameState: GameState;
+  summary: SaveSummary;
 }
 
 function clamp(value: number, min = 0, max = 100) {
@@ -1115,7 +1134,7 @@ function migrateState(raw: Partial<GameState>): GameState {
   return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed };
 }
 
-function readSavedPayload(): { state: GameState; savedAt?: string } | undefined {
+function readLegacySavedPayload(): { state: GameState; savedAt?: string } | undefined {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return undefined;
 
@@ -1128,13 +1147,128 @@ function readSavedPayload(): { state: GameState; savedAt?: string } | undefined 
   }
 }
 
-export function saveGame(state: GameState) {
-  const payload: SavePayload = {
-    version: 2,
-    savedAt: new Date().toISOString(),
-    state,
+function createSlotId() {
+  return `slot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getDefaultSaveName(state: GameState) {
+  return `漂流记录 Day ${state.day || 1}`;
+}
+
+function createSaveSummary(state: GameState, savedAt: string, id?: string, name?: string): SaveSummary {
+  const discovered = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
+  return {
+    exists: true,
+    id,
+    name,
+    day: state.day,
+    boatLevel: state.boatLevel,
+    coins: state.coins,
+    hunger: state.hunger,
+    mood: state.mood,
+    boatHp: state.boatHp,
+    boatMaxHp: state.boatMaxHp,
+    catName: state.cat?.name,
+    fishDexCompletion: Math.round((discovered / fishList.length) * 100),
+    savedAt,
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+function normalizeSaveSlot(rawSlot: any): SaveSlot | undefined {
+  if (!rawSlot?.gameState) return undefined;
+  const gameState = migrateState(rawSlot.gameState);
+  const updatedAt = rawSlot.updatedAt || rawSlot.savedAt || new Date().toISOString();
+  const id = String(rawSlot.id || createSlotId());
+  const name = String(rawSlot.name || getDefaultSaveName(gameState));
+  return {
+    id,
+    name,
+    createdAt: rawSlot.createdAt || updatedAt,
+    updatedAt,
+    gameState,
+    summary: createSaveSummary(gameState, updatedAt, id, name),
+  };
+}
+
+function readRawSaveSlots(): SaveSlot[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SAVE_SLOTS_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeSaveSlot).filter(Boolean) as SaveSlot[];
+  } catch {
+    return [];
+  }
+}
+
+function writeSaveSlots(slots: SaveSlot[]) {
+  localStorage.setItem(SAVE_SLOTS_KEY, JSON.stringify(slots));
+}
+
+function ensureSaveSlots(): SaveSlot[] {
+  const slots = readRawSaveSlots();
+  if (slots.length) return slots;
+
+  const legacy = readLegacySavedPayload();
+  if (!legacy?.state?.started) return [];
+
+  const updatedAt = legacy.savedAt || new Date().toISOString();
+  const id = createSlotId();
+  const migrated: SaveSlot = {
+    id,
+    name: "旧漂流记录",
+    createdAt: updatedAt,
+    updatedAt,
+    gameState: legacy.state,
+    summary: createSaveSummary(legacy.state, updatedAt, id, "旧漂流记录"),
+  };
+  writeSaveSlots([migrated]);
+  localStorage.setItem(ACTIVE_SAVE_ID_KEY, id);
+  return [migrated];
+}
+
+export function getSaveSlots() {
+  return ensureSaveSlots();
+}
+
+export function getActiveSaveId() {
+  return localStorage.getItem(ACTIVE_SAVE_ID_KEY) || undefined;
+}
+
+function getActiveSaveSlot() {
+  const slots = ensureSaveSlots();
+  const activeId = getActiveSaveId();
+  return slots.find((slot) => slot.id === activeId) ?? slots[0];
+}
+
+export function saveGame(state: GameState, options: { slotId?: string; name?: string; asNew?: boolean } = {}) {
+  const slots = ensureSaveSlots();
+  const now = new Date().toISOString();
+  const activeId = getActiveSaveId();
+  const targetId = options.asNew ? createSlotId() : options.slotId || activeId || slots[0]?.id || createSlotId();
+  const existingIndex = options.asNew ? -1 : slots.findIndex((slot) => slot.id === targetId);
+  const existing = existingIndex >= 0 ? slots[existingIndex] : undefined;
+  const name = (options.name?.trim() || existing?.name || getDefaultSaveName(state)).slice(0, 40);
+  const slot: SaveSlot = {
+    id: targetId,
+    name,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+    gameState: state,
+    summary: createSaveSummary(state, now, targetId, name),
+  };
+
+  const nextSlots = existingIndex >= 0 ? slots.map((item, index) => index === existingIndex ? slot : item) : [slot, ...slots];
+  writeSaveSlots(nextSlots);
+  localStorage.setItem(ACTIVE_SAVE_ID_KEY, slot.id);
+
+  const legacyPayload: SavePayload = { version: 2, savedAt: now, state };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(legacyPayload));
+  return slot;
+}
+
+export function autosaveGame(state: GameState) {
+  if (!state.started) return undefined;
+  return saveGame(state);
 }
 
 export function saveGameWithLog(state: GameState): GameState {
@@ -1143,17 +1277,37 @@ export function saveGameWithLog(state: GameState): GameState {
   return next;
 }
 
-export function getSaveSummary(): SaveSummary {
-  const payload = readSavedPayload();
-  if (!payload?.state?.started) return { exists: false };
+export function saveGameAs(state: GameState, name?: string) {
+  return saveGame(state, { asNew: true, name });
+}
 
-  return {
-    exists: true,
-    day: payload.state.day,
-    boatLevel: payload.state.boatLevel,
-    coins: payload.state.coins,
-    savedAt: payload.savedAt,
-  };
+export function renameSaveSlot(slotId: string, name: string) {
+  const slots = ensureSaveSlots();
+  const trimmed = name.trim().slice(0, 40);
+  if (!trimmed) return slots.find((slot) => slot.id === slotId);
+  const nextSlots = slots.map((slot) => {
+    if (slot.id !== slotId) return slot;
+    return { ...slot, name: trimmed, summary: { ...slot.summary, name: trimmed } };
+  });
+  writeSaveSlots(nextSlots);
+  return nextSlots.find((slot) => slot.id === slotId);
+}
+
+export function deleteSaveSlot(slotId: string) {
+  const slots = ensureSaveSlots();
+  const nextSlots = slots.filter((slot) => slot.id !== slotId);
+  writeSaveSlots(nextSlots);
+  const activeId = getActiveSaveId();
+  if (activeId === slotId) {
+    if (nextSlots[0]) localStorage.setItem(ACTIVE_SAVE_ID_KEY, nextSlots[0].id);
+    else localStorage.removeItem(ACTIVE_SAVE_ID_KEY);
+  }
+  return nextSlots;
+}
+
+export function getSaveSummary(): SaveSummary {
+  const slot = getActiveSaveSlot();
+  return slot?.gameState.started ? slot.summary : { exists: false };
 }
 
 export function hasSavedGame() {
@@ -1161,15 +1315,20 @@ export function hasSavedGame() {
 }
 
 export function loadGame(): GameState {
-  const payload = readSavedPayload();
-  return payload?.state ?? createInitialState();
+  const slot = getActiveSaveSlot();
+  return slot?.gameState ?? createInitialState();
 }
 
-export function loadGameWithLog(): GameState {
-  return addSystemLog(loadGame(), "📂 已读取存档，欢迎回到漂流生活。");
+export function loadGameWithLog(slotId?: string): GameState {
+  const slots = ensureSaveSlots();
+  const slot = slots.find((item) => item.id === slotId) ?? getActiveSaveSlot();
+  if (!slot) return createInitialState();
+  localStorage.setItem(ACTIVE_SAVE_ID_KEY, slot.id);
+  return addSystemLog(slot.gameState, "📂 已读取存档，欢迎回到漂流生活。");
 }
 
 export function resetGame(): GameState {
-  localStorage.removeItem(STORAGE_KEY);
+  const activeId = getActiveSaveId();
+  if (activeId) deleteSaveSlot(activeId);
   return createInitialState();
 }
