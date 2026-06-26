@@ -905,7 +905,7 @@ function App() {
           }}
         />
       )}
-      {showTutorial && <TutorialModal onClose={(never) => { setShowTutorial(false); if (never) update({ ...state, tutorialSeen: true }); }} />}
+      {showTutorial && <TutorialModal onClose={() => { setShowTutorial(false); update({ ...state, tutorialSeen: true }); }} />}
       {feedback && <FeedbackModal feedback={feedback} onClose={() => setFeedback(undefined)} />}
     </main>
   );
@@ -1109,7 +1109,7 @@ const moduleItems: { id: ModulePanel; icon: string; label: string }[] = [
   { id: "journal", icon: "日", label: "日记" },
   { id: "cat", icon: "猫", label: "猫猫" },
   { id: "home", icon: "家", label: "家具" },
-  { id: "guide", icon: "问", label: "指南" },
+  { id: "guide", icon: "📘", label: "漂流指南" },
   { id: "settings", icon: "设", label: "设置" },
 ];
 
@@ -1285,13 +1285,15 @@ function GameModulePanel({
 
 function PlayerGuidePanel() {
   const guideSections = [
+    { icon: "玩", title: "基础玩法", text: "钓鱼收集鱼获和贝壳币，打捞带回建材；卖鱼后买补给，开补给包找惊喜。再做饭、进食、升级海上小家。" },
     { icon: "存", title: "存档小贴士", text: "每次钓鱼、打捞、开箱、做饭和结束一天后都会自动保存。设置里还能手动保存、另存为、重命名或读取不同的漂流记录。" },
-    { icon: "鱼", title: "今天做什么", text: "钓鱼收集图鉴和贝壳币，打捞带回建材。卖鱼后去商店补给，再打开补给包找稀有物资，慢慢升级海上小家。" },
-    { icon: "锅", title: "先填饱肚子", text: "把鱼和材料做成料理，再从背包或进食面板吃掉。Hunger 太低会让漂流行动变得吃力。" },
+    { icon: "锅", title: "菜谱和进食", text: "料理会恢复 Hunger 和 Mood，先做好再从背包或进食面板吃掉。热汤和火锅在寒潮、坏天气时更暖心，部分料理猫猫也喜欢。" },
     { icon: "猫", title: "猫猫伙伴", text: "每天可以抚摸、陪玩或让猫猫探索一次。喂猫能提升亲密度；高亲密度的猫偶尔会带回惊喜。" },
     { icon: "券", title: "家具券从哪来", text: "高级补给包更容易开到家具券；Day 5 后打捞、潮汐商店和猫猫探索也有小概率发现。" },
     { icon: "用", title: "生活物资用途", text: "防水布会在暴雨、风暴或高温时自动保护木筏；打火机让烤鱼类料理少花木板；湿巾能恢复 Mood，高温时更有效；修理胶带会让修理多恢复 Boat HP。" },
     { icon: "警", title: "别忘了船体", text: "查看状态栏里的灾害倒计时。暴雨、风暴和巨浪都会伤害 Boat HP，提前留木板、废铁和修理胶带会安心很多。" },
+    { icon: "心", title: "Mood 心情", text: "Mood 高时，钓鱼、打捞、开箱和猫咪事件会更走运；太低时容易失手。吃点好料理、用生活物资或陪猫玩都能慢慢恢复。" },
+    { icon: "册", title: "钓鱼图鉴", text: "首次钓到新鱼会解锁图鉴；持续收集能领取图鉴奖励。看到 NEW 时，记得去图鉴看看新朋友。" },
   ];
 
   return (

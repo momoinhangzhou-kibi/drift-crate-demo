@@ -1496,6 +1496,18 @@ p {
   font-weight: 800;
 }
 
+.tutorial-modal ol li:nth-child(n + 4) {
+  display: none;
+}
+
+.tutorial-modal ol::after {
+  content: "更多猫猫、菜谱、Mood 与灾害说明，随时点底部的“📘 漂流指南”。";
+  display: block;
+  margin-top: 0.7rem;
+  color: #39718c;
+  font-weight: 700;
+}
+
 .ending-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
