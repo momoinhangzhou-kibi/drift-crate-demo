@@ -28,6 +28,7 @@ import {
   getSaveSummary,
   getSaveSlots,
   getMoodStatus,
+  getReputationInfo,
   getSurvivalInfo,
   hasEdibleFood,
   hasFishToSell,
@@ -252,6 +253,11 @@ function App() {
   const discoveredCount = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
   const completion = Math.round((discoveredCount / fishList.length) * 100);
   const survival = getSurvivalInfo(state);
+  const reputation = getReputationInfo(state.reputation ?? 0);
+  const hungerTone = getValueTone(state.hunger, 60, 30);
+  const moodTone = getValueTone(state.mood, 60, 30);
+  const boatHpRate = state.boatHp / state.boatMaxHp;
+  const boatTone = boatHpRate >= 0.7 ? "good" : boatHpRate >= 0.4 ? "warn" : "danger";
   const talentsForMode = talentMode === "manual" ? talents : talentMode === "random" ? [randomTalent ?? talents[0]] : threeTalents;
 
   const pickMusicTrack = (excludeId?: string) => {
@@ -633,11 +639,13 @@ function App() {
           <Status label="灾害倒计时" value={survival.nextDisasterIn === 0 ? "今日" : `${survival.nextDisasterIn}天`} danger={survival.nextDisasterIn <= 2 && state.day >= 5} />
           <Status label="危险等级" value={survival.danger} danger={survival.danger === "高"} />
           <Status label="Weather" value={state.weather} />
-          <Status label="Hunger" value={state.hunger} danger={state.hunger <= 15} />
-          <Status label="Mood" value={`${state.mood} · ${survival.moodStatus}`} danger={state.mood < 40} />
+          <Status label="Hunger" value={`${state.hunger} · ${survival.hungerState}`} tone={hungerTone} />
+          <Status label="Mood" value={`${state.mood} · ${survival.moodState}`} tone={moodTone} />
           <Status label="Coins" value={`${state.coins} 🐚`} />
-          <Status label="Boat HP" value={`${state.boatHp}/${state.boatMaxHp}`} danger={state.boatHp / state.boatMaxHp < 0.4} />
+          <Status label="Boat HP" value={`${state.boatHp}/${state.boatMaxHp} · ${survival.boatState}`} tone={boatTone} />
           <Status label="Boat Level" value={`Lv.${state.boatLevel}`} />
+          <Status label="名声" value={`Lv.${reputation.level} · ${reputation.title}`} tone={reputation.level >= 4 ? "good" : undefined} />
+          {state.weatherEffect && state.weatherEffect.daysLeft > 0 && <Status label="持续天气" value={`${state.weatherEffect.type} ${state.weatherEffect.daysLeft}天`} tone="warn" />}
           <Status label="音乐" value={musicOn ? "开" : "关"} />
         </div>
       </header>
@@ -675,7 +683,8 @@ function App() {
               <p>当前钓具：{state.equipment.includes("goldenRod") ? "黄金鱼竿" : state.equipment.includes("advancedRodItem") || state.equipment.includes("advancedRod") ? "高级钓鱼竿" : state.equipment.includes("sturdyRod") ? "结实钓鱼竿" : "旧钓鱼竿"}</p>
               <h3>下次升级</h3>
               {state.boatLevel >= 4 ? <p>海上补给站已建成，可以通过订单继续经营。</p> : <RequirementList state={state} items={upgradeCost.items} coins={upgradeCost.coins} />}
-              {state.boatHp / state.boatMaxHp < 0.4 && <strong className="warning">船体严重受损。下一次灾害前请尽快修理、升级或准备防水布。</strong>}
+              {state.boatHp / state.boatMaxHp < 0.5 && <strong className="warning">船体受损明显。下一次灾害前请尽快修理、升级或准备防水布。</strong>}
+              <p>名声：Lv.{reputation.level} {reputation.title} · 进度 {reputation.progress}%</p>
             </div>
           </section>
 
@@ -1775,6 +1784,12 @@ function formatSaveTime(savedAt: string) {
   return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+function getValueTone(value: number, goodAt: number, warnAt: number): "good" | "warn" | "danger" {
+  if (value >= goodAt) return "good";
+  if (value >= warnAt) return "warn";
+  return "danger";
+}
+
 function furnitureIcon(name: string) {
   if (name.includes("灯")) return "🏮";
   if (name.includes("桌") || name.includes("火锅")) return "🪵";
@@ -1783,6 +1798,9 @@ function furnitureIcon(name: string) {
   if (name.includes("沙发")) return "🛋️";
   if (name.includes("温泉")) return "♨️";
   if (name.includes("马桶")) return "🚽";
+  if (name.includes("锚")) return "⚓";
+  if (name.includes("篷") || name.includes("棚")) return "⛱️";
+  if (name.includes("屏")) return "🧱";
   if (name.includes("箱")) return "📦";
   return "🪴";
 }
@@ -2154,9 +2172,18 @@ const itemDetailText: Partial<Record<ItemId, { description: string; use: string;
   premiumCrate: { description: "包得更严实的高级补给包。", use: "可以打开获得更多补给。", effect: "更容易出现高级材料、家具、装备和稀有物。" },
   furnitureTicket: { description: "一张可以换来随机家具的券。", use: "点击布置，为海上小屋增加家具。", effect: "布置后 Mood 提升。" },
   wetWipes: { description: "随手擦去海风和黏腻。", use: "在背包详情中直接使用。", effect: "Mood +4；高温天气 Mood +6。" },
+  towel: { description: "吸水很好的毛巾，坏天气后尤其有用。", use: "可直接使用；暴雨、寒潮、高温后也会帮助减少 Mood 损失。", effect: "使用后 Mood +3；坏天气时 Mood +5。" },
+  flashlight: { description: "小小手电筒，雾天和夜里能照亮漂浮物。", use: "大雾/夜晚/高风险打捞时自动生效。", effect: "降低高风险打捞失败率，风暴后搜索残骸更稳。" },
+  wrench: { description: "修理木筏时最顺手的扳手。", use: "修理 Boat HP 时自动生效。", effect: "提高修理恢复量，并降低基础修理消耗。" },
+  screw: { description: "结实的小螺丝，适合做高级加固。", use: "高级修理、家具扩建和未来动力装置都会用到。", effect: "修理时若拥有，会自动消耗 1 个并额外恢复 Boat HP。" },
   lighter: { description: "可靠的防风打火机。", use: "拥有后烤鱼类料理自动少消耗 1 块木板。", effect: "寒潮时也会帮助降低 Mood 损失。" },
   tarp: { description: "能挡雨、遮阳的防水布。", use: "暴雨、风暴或高温时自动消耗。", effect: "减少 Boat HP 或 Mood 损失。" },
   repairTape: { description: "专门用于加固木筏裂缝的胶带。", use: "修理载具时自动消耗 1 个。", effect: "本次修理额外 Boat HP +12。" },
+  merchantCoupon: { description: "路过商船留下的一次性优惠券。", use: "下一次在潮汐商店购物时自动消耗。", effect: "下一次购物享受 85 折，使用后消失。" },
+  luckyShell: { description: "摸起来暖暖的幸运贝壳。", use: "部分随机事件、订单和后续玩法会用到。", effect: "提高一点海上好运气的感觉。" },
+  mysteryBottle: { description: "密封很好的漂流瓶，里面也许有纸条。", use: "可以在背包详情中打开。", effect: "随机获得小故事、订单、种子、幸运贝壳或贝壳币。" },
+  seaweed: { description: "缠在漂浮物上的海草。", use: "可以直接吃一点，也可作为简单料理/订单材料。", effect: "使用后 Hunger +5，Mood +1。" },
+  oldBoot: { description: "不知道漂了多久的破鞋。", use: "可以拆解，或者留给奇怪的海上订单。", effect: "拆解后获得少量塑料或胶带。" },
   soap: { description: "小小一块肥皂，也能让海上生活整洁一点。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
   toothbrush: { description: "认真刷牙，是漂流生活的仪式感。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
   toothpaste: { description: "一点清新的味道。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
@@ -2206,7 +2233,7 @@ function ItemDetailModal({
   const food = foodItems.find((item) => item.id === itemId);
   const catOption = getCatFeedOptions(state).find((option) => option.itemId === itemId);
   const crate = itemId === "commonCrate" || itemId === "premiumCrate" ? itemId : undefined;
-  const usableItemIds: ItemId[] = ["wetWipes", "soap", "toothbrush", "toothpaste", "medkit"];
+  const usableItemIds: ItemId[] = ["wetWipes", "towel", "soap", "toothbrush", "toothpaste", "medkit", "mysteryBottle", "seaweed", "oldBoot"];
   const furnitureIds: ItemId[] = ["furnitureTicket", "foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox", "planterBox"];
   const cropIds = seedCatalog.map((item) => item.cropId);
   const equipmentActive = state.equipment.includes(itemId) || (itemId === "advancedRodItem" && state.equipment.includes("advancedRod"));
@@ -2256,9 +2283,13 @@ const furnitureDetails: Record<string, { emoji: string; description: string; eff
   "迷你温泉": { emoji: "♨️", description: "小小一池热水，是海上小家最奢侈的角落。", effect: "每日 Mood +2，寒潮时 Mood 损失减少。" },
   "海上火锅桌": { emoji: "🍲", description: "稳稳固定在平台上的小火锅桌，适合庆祝钓到好鱼。", effect: "进食/料理 Mood 效果 +1，寒潮时额外保护。" },
   "豪华沙发": { emoji: "🛋️", description: "软乎乎的休息角，让木筏有了真正的客厅。", effect: "每日 Mood +2。" },
-  "贝壳灯": { emoji: "🏮", description: "暖黄色小灯，坏天气里也能照亮小屋。", effect: "暴雨时减少 Mood 损失。" },
+  "贝壳灯": { emoji: "🏮", description: "暖黄色小灯，坏天气里也能照亮小屋。", effect: "暴雨/大雾/夜晚减少负面事件，高风险打捞更稳。" },
   "防水床垫": { emoji: "🛏️", description: "不会被浪花轻易打湿的床垫，睡起来踏实很多。", effect: "每日 Mood +1，暴雨/寒潮时减少 Mood 损失。" },
   "海上便利店许可证": { emoji: "🏪", description: "挂在小屋里的经营许可，感觉真的要开店了。", effect: "商店价格小幅优惠，也代表补给站经营感提升。" },
+  "防雨篷": { emoji: "⛱️", description: "架在平台上的防雨篷，雨水终于不再全往小屋里灌。", effect: "暴雨/风暴时减少 Boat HP 和 Mood 损失。" },
+  "固定锚": { emoji: "⚓", description: "沉甸甸的固定锚，让木筏在大浪里不那么容易被掀翻。", effect: "巨浪和风暴时减少船体伤害。" },
+  "挡风屏": { emoji: "🧱", description: "简易挡风屏，能挡住最冷的海风。", effect: "寒潮时减少 Hunger/Mood 损失。" },
+  "遮阳棚": { emoji: "⛱️", description: "晒得发烫的日子里，它就是一小片救命阴影。", effect: "高温时减少 Hunger/Mood 损失。" },
   "小木桌": { emoji: "🪵", description: "一张结实的小桌子，可以摆饭、摆贝壳、摆今天的收获。", effect: "提升生活感，后续可扩展更多料理/摆放效果。" },
   "折叠椅": { emoji: "🪑", description: "收放方便的椅子，适合坐着看海。", effect: "提升生活感，布置时 Mood 提升。" },
   "简易马桶": { emoji: "🚽", description: "朴素但重要的生活设施。", effect: "提升小屋生活质量。" },
@@ -2723,9 +2754,10 @@ function FoodRow({ food, state, onEat }: { food: Food; state: GameState; onEat: 
   );
 }
 
-function Status({ label, value, danger = false }: { label: string; value: string | number; danger?: boolean }) {
+function Status({ label, value, danger = false, tone }: { label: string; value: string | number; danger?: boolean; tone?: "good" | "warn" | "danger" }) {
+  const statusTone = tone ?? (danger ? "danger" : "");
   return (
-    <div className={danger ? "status danger" : "status"}>
+    <div className={`status ${statusTone}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>

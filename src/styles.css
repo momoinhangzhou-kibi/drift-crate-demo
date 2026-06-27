@@ -858,6 +858,7 @@ p {
   border-radius: 14px;
   padding: 0.65rem;
   background: #effbff;
+  border: 1px solid rgba(76, 154, 188, 0.12);
 }
 
 .status span {
@@ -874,6 +875,19 @@ p {
 .status.danger {
   background: #ffe2e2;
   color: #a33232;
+  border-color: rgba(205, 72, 72, 0.28);
+}
+
+.status.good {
+  background: #e8f8dc;
+  color: #326a2f;
+  border-color: rgba(79, 153, 68, 0.24);
+}
+
+.status.warn {
+  background: #fff4c9;
+  color: #896118;
+  border-color: rgba(194, 142, 35, 0.28);
 }
 
 .layout,

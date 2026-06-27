@@ -18,7 +18,7 @@ import {
   upgradeRequirements,
   weatherList,
 } from "./data";
-import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishingCatchRating, FishRarity, GameState, GardenPlot, ItemId, LogType, Rarity, Recipe, SalvageOption, SalvageRisk, SeaOrder, TalentId, TradePrices, Weather } from "./types";
+import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishingCatchRating, FishRarity, GameState, GardenPlot, ItemId, LogType, Rarity, Recipe, SalvageOption, SalvageRisk, SeaOrder, TalentId, TradePrices, Weather, WeatherEffect } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
 const SAVE_SLOTS_KEY = "drift-crate-save-slots";
@@ -73,6 +73,26 @@ export function getMoodStatus(mood: number) {
   if (mood >= 40) return "有点低落";
   if (mood >= 20) return "疲惫";
   return "崩溃边缘";
+}
+
+export function getReputationInfo(reputation = 0) {
+  const levels = [
+    { min: 0, level: 1, title: "漂流新人", next: 30 },
+    { min: 30, level: 2, title: "小有名气", next: 80 },
+    { min: 80, level: 3, title: "海上熟人", next: 150 },
+    { min: 150, level: 4, title: "补给站老板", next: 260 },
+    { min: 260, level: 5, title: "海上传说", next: 260 },
+  ];
+  const current = [...levels].reverse().find((item) => reputation >= item.min) ?? levels[0];
+  return { ...current, progress: current.level >= 5 ? 100 : Math.round(((reputation - current.min) / (current.next - current.min)) * 100) };
+}
+
+function getDangerKey(state: GameState) {
+  const hpRate = state.boatHp / state.boatMaxHp;
+  const hunger = state.hunger < 30 ? "hunger-danger" : state.hunger < 60 ? "hunger-warn" : "hunger-ok";
+  const mood = state.mood < 30 ? "mood-danger" : state.mood < 60 ? "mood-warn" : "mood-ok";
+  const boat = hpRate < 0.25 ? "boat-critical" : hpRate < 0.5 ? "boat-danger" : hpRate < 0.8 ? "boat-warn" : "boat-ok";
+  return `${hunger}|${mood}|${boat}`;
 }
 
 function updateCat(state: GameState, patch: Partial<CatState>): GameState {
@@ -407,15 +427,16 @@ export function getSurvivalInfo(state: GameState) {
   const phase = state.day <= 3 ? "新手安全期" : state.day <= 7 ? "适应期" : "正式求生期";
   const nextDisasterIn = state.day < 7 ? 7 - state.day : (7 - ((state.day - 7) % 7)) % 7;
   const hpRate = state.boatHp / state.boatMaxHp;
-  const hungerState = state.hunger >= 60 ? "正常" : state.hunger >= 30 ? "饥饿" : state.hunger >= 10 ? "虚弱" : "濒危";
-  const moodState = state.mood >= 80 ? "状态很好" : state.mood >= 60 ? "平稳" : state.mood >= 40 ? "有点低落" : state.mood >= 20 ? "疲惫" : "崩溃边缘";
-  const boatState = hpRate >= 0.7 ? "稳定" : hpRate >= 0.4 ? "受损" : state.boatHp > 0 ? "严重受损" : "沉没";
+  const hungerState = state.hunger >= 60 ? "正常" : state.hunger >= 30 ? "饥饿" : "虚弱";
+  const moodState = state.mood >= 80 ? "状态很好" : state.mood >= 60 ? "平稳" : state.mood >= 30 ? "低落" : "崩溃边缘";
+  const boatState = hpRate >= 0.8 ? "稳定" : hpRate >= 0.5 ? "轻微受损" : hpRate >= 0.25 ? "严重受损" : state.boatHp > 0 ? "濒临解体" : "紧急漂流";
   const danger = state.day <= 3 ? "低" : nextDisasterIn <= 2 && state.day >= 5 ? "高" : state.day <= 7 ? "中" : "中";
   return { phase, nextDisasterIn, danger, hungerState, moodState, boatState, moodStatus: getMoodStatus(state.mood) };
 }
 
-export function createDailyOrders(day: number, boatLevel: BoatLevel = 1): SeaOrder[] {
-  const advanced = day >= 8 || boatLevel >= 4;
+export function createDailyOrders(day: number, boatLevel: BoatLevel = 1, reputation = 0): SeaOrder[] {
+  const rep = getReputationInfo(reputation);
+  const advanced = day >= 8 || boatLevel >= 4 || rep.level >= 4;
   const pool: SeaOrder[] = [
     { id: `mat-${day}`, kind: "material", title: "修船材料委托", story: "路过的小船需要基础材料。", itemCost: { wood: 4, rope: 1 }, rewardCoins: 32, rewardItems: { commonCrate: 1 } },
     { id: `food-${day}`, kind: "food", title: "热汤外送", story: "隔壁木筏想换一碗热汤。", itemCost: { fishSoup: 1 }, rewardCoins: 45, rewardMood: 2 },
@@ -431,7 +452,8 @@ export function createDailyOrders(day: number, boatLevel: BoatLevel = 1): SeaOrd
       { id: `rarefish-${day}`, kind: "fish", title: "稀有鱼展示订单", story: "收藏商想买一条稀有鱼。", fishRarityCost: "Rare", fishCount: 1, rewardCoins: 95, rewardItems: { furnitureTicket: 1 } },
     );
   }
-  return [...pool].sort(() => Math.random() - 0.5).slice(0, advanced ? 3 : 2);
+  const count = Math.min(4, (advanced ? 3 : 2) + (rep.level >= 2 ? 1 : 0));
+  return [...pool].sort(() => Math.random() - 0.5).slice(0, count);
 }
 
 export const seedCatalog: { seedId: ItemId; cropId: ItemId; growDays: number; yield: number; price: number }[] = [
@@ -467,7 +489,7 @@ export function startGame(talent: TalentId, catType: CatType = "black"): GameSta
     tradePrices: createLegacyPrices(),
     fishPrices: createFishPrices(),
     shopStock: createShopStock(1),
-    orders: createDailyOrders(1, baseState.boatLevel),
+    orders: createDailyOrders(1, baseState.boatLevel, baseState.reputation),
     lastMoodStatus: getMoodStatus(baseState.mood + (cat.type === "black" ? 3 : 0)),
     equipment: [...new Set([...(selectedTalent.startingEquipment ?? [])])],
   };
@@ -632,7 +654,9 @@ function riskSuccessRate(state: GameState, risk: SalvageRisk) {
   const base = risk === "低" ? 0.9 : risk === "中" ? 0.68 : 0.48;
   const moodBonus = state.mood >= 80 ? 0.08 : state.mood < 35 ? -0.1 : 0;
   const gearBonus = state.equipment.includes("waterproofBackpack") ? 0.04 : 0;
-  return Math.max(0.18, Math.min(0.96, base + moodBonus + gearBonus));
+  const fogPenalty = state.weather === "大雾" && risk === "高" && state.inventory.flashlight <= 0 && !state.furniture.includes("贝壳灯") ? -0.14 : 0;
+  const lightBonus = state.weather === "大雾" && (state.inventory.flashlight > 0 || state.furniture.includes("贝壳灯")) ? 0.08 : 0;
+  return Math.max(0.18, Math.min(0.96, base + moodBonus + gearBonus + fogPenalty + lightBonus));
 }
 
 export function salvageWithChoice(state: GameState, optionId: string): GameState {
@@ -851,13 +875,16 @@ export function completeOrder(state: GameState, orderId: string): GameState {
   }
   const bonusCoins = state.boatLevel >= 4 ? 12 : 0;
   const moodBonusCoins = state.mood >= 80 && Math.random() < 0.25 ? 8 : 0;
-  next = { ...next, coins: next.coins + (order.rewardCoins ?? 0) + bonusCoins + moodBonusCoins, mood: clamp(next.mood + (order.rewardMood ?? 0)) };
+  const repGain = order.kind === "rescue" ? 12 : order.kind === "food" || order.kind === "crop" ? 9 : 7;
+  const reputation = (next.reputation ?? 0) + repGain;
+  const rep = getReputationInfo(reputation);
+  next = { ...next, reputation, coins: next.coins + (order.rewardCoins ?? 0) + bonusCoins + moodBonusCoins, mood: clamp(next.mood + (order.rewardMood ?? 0)) };
   Object.entries(order.rewardItems ?? {}).forEach(([id, amount]) => {
     next = addItem(next, id as ItemId, amount ?? 0);
   });
   if (order.rewardCatIntimacy) next = updateCat(next, { intimacy: next.cat.intimacy + order.rewardCatIntimacy });
   next = { ...next, orders: next.orders.filter((item) => item.id !== orderId) };
-  return addLog(next, "trade", "海上订单", `完成「${order.title}」，海上补给站的名声更响了。`, [`+${(order.rewardCoins ?? 0) + bonusCoins + moodBonusCoins} 贝壳币`, ...(bonusCoins ? ["满级补给站奖励 +12"] : []), ...(moodBonusCoins ? ["Mood 奖励 +8"] : [])], true);
+  return addLog(next, "trade", "海上订单", `完成「${order.title}」，海上补给站的名声更响了。当前名声 Lv.${rep.level} ${rep.title}。`, [`+${(order.rewardCoins ?? 0) + bonusCoins + moodBonusCoins} 贝壳币`, `名声 +${repGain}`, `Lv.${rep.level} ${rep.title} · ${rep.progress}%`, ...(bonusCoins ? ["满级补给站奖励 +12"] : []), ...(moodBonusCoins ? ["Mood 奖励 +8"] : [])], true);
 }
 
 export function abandonOrder(state: GameState, orderId: string): GameState {
@@ -878,17 +905,20 @@ export function buyItem(state: GameState, itemId: "commonCrate" | "premiumCrate"
 export function buyShopItem(state: GameState, itemId: ItemId, amount = 1): GameState {
   const shopItem = state.shopStock.find((item) => item.id === itemId);
   if (!shopItem || shopItem.quantity <= 0) return addLog(state, "warning", "潮汐商店", "这件商品已经卖完了。");
-  const discount = state.equipment.includes("shopPermit") || state.inventory.merchantCoupon > 0 ? 0.9 : 1;
+  const useCoupon = state.inventory.merchantCoupon > 0;
+  const repDiscount = getReputationInfo(state.reputation ?? 0).level >= 3 ? 0.95 : 1;
+  const discount = useCoupon ? 0.85 : state.equipment.includes("shopPermit") ? 0.9 : repDiscount;
   const price = Math.ceil(shopItem.price * discount);
   const safeAmount = Math.max(1, Math.min(Math.floor(amount), shopItem.quantity, Math.floor(state.coins / price)));
   if (safeAmount <= 0) return addLog(state, "warning", "贝壳币不足", `贝壳币不足，买不起${itemNames[itemId]}。`);
   const total = price * safeAmount;
   const shopStock = state.shopStock.map((item) => item.id === itemId ? { ...item, quantity: item.quantity - safeAmount } : item);
   let next = addItem({ ...state, coins: state.coins - total, shopStock }, itemId, safeAmount);
+  if (useCoupon) next = addItem(next, "merchantCoupon", -1);
   if (["sturdyRod", "advancedRodItem", "fishingNet", "solarPurifier", "waterproofBackpack", "autoFisher"].includes(itemId) && !next.equipment.includes(itemId)) {
     next = { ...next, equipment: [...next.equipment, itemId] };
   }
-  return addLog(next, "trade", "潮汐商店", `买下${itemNames[itemId]} x${safeAmount}，花费 ${total} 贝壳币。`, [`${itemNames[itemId]} x${safeAmount}`]);
+  return addLog(next, "trade", "潮汐商店", `买下${itemNames[itemId]} x${safeAmount}，花费 ${total} 贝壳币。`, [`${itemNames[itemId]} x${safeAmount}`, ...(useCoupon ? ["商船优惠券 x-1"] : []), ...(!useCoupon && repDiscount < 1 ? ["名声折扣生效"] : [])]);
 }
 
 export function placePlanterBox(state: GameState): GameState {
@@ -1007,6 +1037,7 @@ export function useUtilityItem(state: GameState, itemId: ItemId): GameState {
   const highTemperature = state.weather === "高温";
   const moodItems: Partial<Record<ItemId, { mood: number; message: string }>> = {
     wetWipes: { mood: highTemperature ? 6 : 4, message: highTemperature ? "湿巾带走了暑气。" : "擦了擦脸，整个人清爽多了。" },
+    towel: { mood: state.weather === "暴雨" || state.weather === "寒潮" || state.weather === "高温" ? 5 : 3, message: "用毛巾擦干海水和汗，身体舒服了一点。" },
     soap: { mood: 2, message: "洗去海盐和疲惫，心情也轻了一点。" },
     toothbrush: { mood: 2, message: "认真刷了牙，漂流生活也要保持仪式感。" },
     toothpaste: { mood: 2, message: "清新的味道让你精神了一点。" },
@@ -1021,6 +1052,34 @@ export function useUtilityItem(state: GameState, itemId: ItemId): GameState {
     if (state.hunger >= 55 && state.mood >= 55) return addLog(state, "warning", "简易药包", "你现在状态还不错，先把药包留着吧。");
     const next = addItem(state, itemId, -1);
     return addLog({ ...next, hunger: clamp(next.hunger + 15), mood: clamp(next.mood + 8) }, "event", "使用简易药包", "简单处理了一下疲惫和擦伤。Hunger +15，Mood +8。", ["简易药包 x-1", "Hunger +15", "Mood +8"]);
+  }
+
+  if (itemId === "mysteryBottle") {
+    let next = addItem(state, "mysteryBottle", -1);
+    const roll = Math.random();
+    if (roll < 0.28) {
+      const coins = randomInt(12, 35);
+      next = { ...next, coins: next.coins + coins };
+      return addLog(next, "event", "神秘漂流瓶", "瓶中纸条写着一段陌生人的航海日记，夹着几枚贝壳币。", [`+${coins} 贝壳币`], true);
+    }
+    if (roll < 0.55) {
+      const seed = pick(seedCatalog);
+      next = addItem(next, seed.seedId, 1);
+      return addLog(next, "event", "神秘漂流瓶", `瓶子里竟然封着${itemNames[seed.seedId]}。`, [`${itemNames[seed.seedId]} x1`], true);
+    }
+    if (roll < 0.72) return addLog({ ...next, orders: createDailyOrders(next.day, next.boatLevel, next.reputation ?? 0) }, "trade", "神秘订单", "瓶中纸条是一张新的海上委托。", ["订单已刷新"], true);
+    if (roll < 0.84) return addLog(addItem(next, "luckyShell", 1), "event", "神秘漂流瓶", "瓶底躺着一枚发亮的幸运贝壳。", ["幸运贝壳 x1"], true);
+    return addLog(addItem(next, "commonCrate", 1), "event", "神秘漂流瓶", "纸条指向附近漂来的一个小补给包。", ["普通补给包 x1"], true);
+  }
+
+  if (itemId === "seaweed") {
+    const next = addItem(state, "seaweed", -1);
+    return addLog({ ...next, hunger: clamp(next.hunger + 5), mood: clamp(next.mood + 1) }, "event", "使用海草", "你把海草简单处理了一下，勉强能垫垫肚子。", ["Hunger +5", "Mood +1"]);
+  }
+
+  if (itemId === "oldBoot") {
+    const next = addItem(addItem(state, "oldBoot", -1), Math.random() < 0.5 ? "plastic" : "tape", 1);
+    return addLog(next, "event", "拆解破鞋", "破鞋本身没法穿，但拆一拆还能回收点材料。", ["破鞋 x-1", "塑料/胶带 x1"]);
   }
 
   return addLog(state, "warning", "使用物品", `${itemNames[itemId]}需要在对应场景中自动生效。`);
@@ -1222,16 +1281,19 @@ export function upgradeBoat(state: GameState): GameState {
 
 export function getRepairPreview(state: GameState) {
   const hasToolbox = state.inventory.toolbox > 0;
-  const cost: Partial<Record<ItemId, number>> = hasToolbox ? { wood: 2 } : { wood: 3, scrap: 1 };
+  const hasWrench = state.inventory.wrench > 0;
+  const cost: Partial<Record<ItemId, number>> = hasToolbox || hasWrench ? { wood: 2 } : { wood: 3, scrap: 1 };
   if (state.talent === "crafting" && cost.wood) cost.wood = Math.max(1, cost.wood - 1);
   const useRepairTape = state.inventory.repairTape > 0;
-  const repairValue = (hasToolbox ? 32 : 20) + (useRepairTape ? 12 : 0) + (state.talent === "repair" ? 8 : 0);
+  const screwBoost = state.inventory.screw > 0 ? 10 : 0;
+  const repairValue = (hasToolbox ? 32 : hasWrench ? 26 : 20) + (useRepairTape ? 12 : 0) + screwBoost + (state.talent === "repair" ? 8 : 0);
   return { cost, repairValue, useRepairTape };
 }
 
 export function repairBoat(state: GameState): GameState {
   const hasToolbox = state.inventory.toolbox > 0;
-  const cost: Partial<Record<ItemId, number>> = hasToolbox ? { wood: 2 } : { wood: 3, scrap: 1 };
+  const hasWrench = state.inventory.wrench > 0;
+  const cost: Partial<Record<ItemId, number>> = hasToolbox || hasWrench ? { wood: 2 } : { wood: 3, scrap: 1 };
   if (state.talent === "crafting" && cost.wood) cost.wood = Math.max(1, cost.wood - 1);
   const missing = describeMissingItems(state, cost);
 
@@ -1241,8 +1303,10 @@ export function repairBoat(state: GameState): GameState {
   let next = spendItems(state, cost);
   const usedRepairTape = next.inventory.repairTape > 0;
   if (usedRepairTape) next = addItem(next, "repairTape", -1);
-  const repairValue = (hasToolbox ? 32 : 20) + (usedRepairTape ? 12 : 0) + (state.talent === "repair" ? 8 : 0);
-  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + repairValue), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", `你敲敲补补修好了载具。${hasToolbox ? "工具箱让修理更顺手。" : ""}${usedRepairTape ? "修理胶带加固了关键裂缝。" : ""}${state.talent === "repair" ? "漂流维修工生效：额外修复了船体。" : ""}`, [`Boat HP +${repairValue}`, ...(usedRepairTape ? ["修理胶带 x-1"] : []), ...(state.talent === "repair" ? ["天赋加成：Boat HP +8"] : [])]);
+  const usedScrew = next.inventory.screw > 0;
+  if (usedScrew) next = addItem(next, "screw", -1);
+  const repairValue = (hasToolbox ? 32 : hasWrench ? 26 : 20) + (usedRepairTape ? 12 : 0) + (usedScrew ? 10 : 0) + (state.talent === "repair" ? 8 : 0);
+  return addLog({ ...next, boatHp: Math.min(next.boatMaxHp, next.boatHp + repairValue), mood: clamp(next.mood + 2) }, "upgrade", "修理载具", `你敲敲补补修好了载具。${hasToolbox ? "工具箱让修理更顺手。" : hasWrench ? "扳手让修理更稳。" : ""}${usedRepairTape ? "修理胶带加固了关键裂缝。" : ""}${usedScrew ? "螺丝固定了松动结构。" : ""}${state.talent === "repair" ? "漂流维修工生效：额外修复了船体。" : ""}`, [`Boat HP +${repairValue}`, ...(usedRepairTape ? ["修理胶带 x-1"] : []), ...(usedScrew ? ["螺丝 x-1"] : []), ...(state.talent === "repair" ? ["天赋加成：Boat HP +8"] : [])]);
 }
 
 export function placeInventoryFurniture(state: GameState, itemId: ItemId): GameState {
@@ -1349,27 +1413,31 @@ function applyDisaster(state: GameState, weather: Weather): GameState {
   let moodLoss = 0;
   let catMoodLoss = 0;
 
-  const boatShieldRate = next.boatLevel === 1 ? 1.15 : next.boatLevel === 2 ? 1 : next.boatLevel === 3 ? 0.78 : 0.58;
+  const criticalPenalty = next.boatHp / next.boatMaxHp < 0.25 ? 1.18 : 1;
+  const boatShieldRate = (next.boatLevel === 1 ? 1.15 : next.boatLevel === 2 ? 1 : next.boatLevel === 3 ? 0.82 : 0.68) * criticalPenalty;
   if (weather === "暴雨") {
-    boatLoss = 10;
-    moodLoss = 5;
+    boatLoss = 18;
+    moodLoss = 7;
     catMoodLoss = 3;
     const tarp = consumeProtection(next, "tarp", "防水布", rewards);
     next = tarp.next;
-    if (tarp.active || next.furniture.includes("防水床垫")) {
-      boatLoss -= 5;
+    if (tarp.active || next.furniture.includes("防雨篷") || next.furniture.includes("防水床垫")) {
+      boatLoss -= next.furniture.includes("防雨篷") ? 8 : 5;
       moodLoss -= 3;
     }
+    if (!tarp.active && !next.furniture.includes("防雨篷") && !next.furniture.includes("防水床垫")) moodLoss += 4;
     if ((tarp.active || next.equipment.includes("solarPurifier") || next.equipment.includes("waterPurifier")) && Math.random() < 0.65) {
       next = addItem(next, "water", 1);
       rewards.push("淡水 x1");
     }
   } else if (weather === "风暴") {
-    boatLoss = 25 + (next.boatLevel <= 1 ? 10 : 0);
+    boatLoss = 36 + (next.boatLevel <= 1 ? 10 : 0);
     catMoodLoss = 5;
     const tarp = consumeProtection(next, "tarp", "防水布", rewards);
     next = tarp.next;
     if (tarp.active) boatLoss -= 8;
+    if (next.furniture.includes("防雨篷")) boatLoss -= 7;
+    if (next.furniture.includes("固定锚")) boatLoss -= 5;
     if ((next.inventory.wood ?? 0) > 0 && Math.random() < 0.45) {
       next = addItem(next, "wood", -1);
       rewards.push("损失木板 x1");
@@ -1379,35 +1447,37 @@ function applyDisaster(state: GameState, weather: Weather): GameState {
       rewards.push("损失绳子 x1");
     }
   } else if (weather === "寒潮") {
-    hungerLoss = 10;
-    moodLoss = 10;
+    hungerLoss = 16;
+    moodLoss = 14;
     catMoodLoss = 5;
-    const protectedByHome = next.inventory.lighter > 0 || next.furniture.includes("海上火锅桌") || next.furniture.includes("防水床垫") || next.furniture.includes("迷你温泉");
+    const protectedByHome = next.inventory.lighter > 0 || next.furniture.includes("海上火锅桌") || next.furniture.includes("防水床垫") || next.furniture.includes("迷你温泉") || next.furniture.includes("挡风屏") || next.inventory.fishSoup > 0 || next.inventory.warmFishSoup > 0 || next.inventory.driftHotpot > 0;
     if (protectedByHome) {
-      hungerLoss -= 4;
-      moodLoss -= 5;
+      hungerLoss -= 6;
+      moodLoss -= next.furniture.includes("挡风屏") ? 8 : 5;
       rewards.push("保暖物资生效");
     }
   } else if (weather === "高温") {
-    hungerLoss = 15;
-    moodLoss = 5;
+    hungerLoss = 18;
+    moodLoss = 8;
     const usedWater = (next.inventory.water ?? 0) > 0;
     if (usedWater) {
       next = addItem(next, "water", -1);
       hungerLoss -= 7;
       rewards.push("消耗淡水 x1");
-    }
+    } else moodLoss += 6;
     const shade = consumeProtection(next, "tarp", "防水布遮阳", rewards);
     next = shade.next;
-    if (shade.active || (next.inventory.wetWipes ?? 0) > 0) moodLoss -= 3;
+    if (shade.active || next.furniture.includes("遮阳棚") || (next.inventory.wetWipes ?? 0) > 0 || (next.inventory.towel ?? 0) > 0) moodLoss -= 5;
   } else if (weather === "巨浪") {
-    boatLoss = 30;
+    boatLoss = 42;
     catMoodLoss = 4;
+    if (next.furniture.includes("固定锚")) boatLoss -= 12;
     if (next.boatLevel >= 3) boatLoss -= 10;
     else if (next.boatLevel === 2) boatLoss -= 5;
   }
 
   boatLoss = Math.max(0, Math.round(boatLoss * boatShieldRate));
+  if (weather === "暴雨" || weather === "风暴" || weather === "巨浪") boatLoss = Math.max(weather === "暴雨" ? 8 : weather === "风暴" ? 15 : 18, boatLoss);
   if (state.talent === "repair" && boatLoss > 0) {
     boatLoss = Math.max(0, boatLoss - 3);
     rewards.push("漂流维修工减免船体伤害 3");
@@ -1421,6 +1491,11 @@ function applyDisaster(state: GameState, weather: Weather): GameState {
     hunger: clamp(next.hunger - hungerLoss),
     mood: clamp(next.mood - moodLoss),
   };
+  const effect: WeatherEffect | undefined = weather === "寒潮" ? { type: "寒潮持续", daysLeft: randomInt(1, 2) } : weather === "高温" ? { type: "高温持续", daysLeft: randomInt(1, 2) } : weather === "风暴" ? { type: "风暴余波", daysLeft: randomInt(1, 2) } : undefined;
+  if (effect) {
+    next = { ...next, weatherEffect: effect };
+    rewards.push(`${effect.type} ${effect.daysLeft}天`);
+  }
 
   const serious = weather === "巨浪" && next.boatHp / next.boatMaxHp < 0.4;
   return addLog(
@@ -1431,6 +1506,52 @@ function applyDisaster(state: GameState, weather: Weather): GameState {
     [`Boat HP -${boatLoss}`, ...(hungerLoss ? [`Hunger -${hungerLoss}`] : []), ...(moodLoss ? [`Mood -${moodLoss}`] : []), ...(catMoodLoss ? [`猫心情 -${catMoodLoss}`] : []), ...rewards],
     true,
   );
+}
+
+function emergencyRepair(state: GameState): GameState {
+  if (state.boatHp > 0) return state;
+  let next = state;
+  const rewards: string[] = [];
+  const targetHp = Math.max(12, Math.round(state.boatMaxHp * 0.2));
+  const useWood = Math.min(next.inventory.wood ?? 0, 4);
+  const useScrap = Math.min(next.inventory.scrap ?? 0, 2);
+  if (useWood > 0) {
+    next = addItem(next, "wood", -useWood);
+    rewards.push(`木板 x-${useWood}`);
+  }
+  if (useScrap > 0) {
+    next = addItem(next, "scrap", -useScrap);
+    rewards.push(`铁片 x-${useScrap}`);
+  }
+  const coinCost = useWood + useScrap >= 3 ? 20 : 45;
+  next = { ...next, coins: Math.max(0, next.coins - coinCost), boatHp: targetHp, mood: clamp(next.mood - 8) };
+  rewards.push(`贝壳币 -${coinCost}`, `Boat HP 回到 ${targetHp}`);
+  return addLog(next, "warning", "紧急修补", "船体几乎散架，你用能找到的一切材料做了紧急修补，勉强重新漂起来。", rewards, true);
+}
+
+function applyWeatherEffect(state: GameState): GameState {
+  const effect = state.weatherEffect;
+  if (!effect || effect.daysLeft <= 0) return state;
+  let next: GameState = { ...state, weatherEffect: effect.daysLeft > 1 ? { ...effect, daysLeft: effect.daysLeft - 1 } : undefined };
+  const rewards: string[] = [`剩余 ${Math.max(0, effect.daysLeft - 1)} 天`];
+  if (effect.type === "寒潮持续") {
+    const moodLoss = next.furniture.includes("挡风屏") || next.furniture.includes("防水床垫") ? 3 : 6;
+    next = { ...next, hunger: clamp(next.hunger - 8), mood: clamp(next.mood - moodLoss) };
+    rewards.push("Hunger -8", `Mood -${moodLoss}`);
+  } else if (effect.type === "高温持续") {
+    if ((next.inventory.water ?? 0) > 0) {
+      next = addItem(next, "water", -1);
+      rewards.push("淡水 x-1");
+    } else {
+      next = { ...next, mood: clamp(next.mood - 8), hunger: clamp(next.hunger - 5) };
+      rewards.push("缺水：Mood -8", "Hunger -5");
+    }
+  } else {
+    const loss = next.furniture.includes("固定锚") ? 3 : 6;
+    next = { ...next, boatHp: Math.max(0, next.boatHp - loss) };
+    rewards.push(`Boat HP -${loss}`);
+  }
+  return addLog(next, "warning", "持续天气", `${effect.type}仍在影响漂流生活。`, rewards, true);
 }
 
 function advanceGarden(state: GameState): GameState {
@@ -1470,10 +1591,11 @@ export function endDay(state: GameState): GameState {
     tradePrices: createLegacyPrices(),
     newestFishId: undefined,
     shopStock: state.day % 7 === 0 ? createShopStock(state.day + 1) : state.shopStock,
-    orders: createDailyOrders(state.day + 1, state.boatLevel),
+    orders: createDailyOrders(state.day + 1, state.boatLevel, state.reputation ?? 0),
   };
 
   if (state.day % 7 === 0) next = addLog(next, "trade", "潮汐商店", "潮汐商店刷新了新的库存。");
+  next = applyWeatherEffect(next);
   next = advanceGarden(next);
   if (dailyFurnitureMood > 0) next = addLog(next, "furniture", "家具效果", `舒适家具让海上小家更安心，Mood +${dailyFurnitureMood}。`, [`Mood +${dailyFurnitureMood}`]);
 
@@ -1527,8 +1649,16 @@ export function endDay(state: GameState): GameState {
   } else {
     next = { ...next, lastMoodStatus: afterMoodStatus };
   }
-  if (next.boatHp <= 0) next = { ...addLog(next, "warning", "结局", "木筏沉没了，你被路过商船救起。", [], true), gameOverReason: "木筏沉没" };
-  else if (next.hunger <= 0 && Math.random() < 0.35) next = { ...addLog(next, "warning", "结局", "你饿得没有力气继续漂流，被救援船带离。", [], true), gameOverReason: "饥饿濒危" };
+  const dangerKey = getDangerKey(next);
+  if (dangerKey !== next.lastDangerStatus) {
+    const info = getSurvivalInfo(next);
+    const hpRate = next.boatHp / next.boatMaxHp;
+    if (next.hunger < 30 || next.mood < 30 || hpRate < 0.5) {
+      next = addLog({ ...next, lastDangerStatus: dangerKey }, "warning", "状态预警", `当前状态：Hunger ${info.hungerState} / Mood ${info.moodState} / 船体${info.boatState}。`, [], true);
+    } else next = { ...next, lastDangerStatus: dangerKey };
+  }
+  if (next.boatHp <= 0) next = emergencyRepair(next);
+  if (next.hunger <= 0 && Math.random() < 0.35) next = { ...addLog(next, "warning", "结局", "你饿得没有力气继续漂流，被救援船带离。", [], true), gameOverReason: "饥饿濒危" };
   else if (next.mood <= 0 && Math.random() < 0.3) next = { ...addLog(next, "warning", "结局", "你决定结束这次漂流生活，回到岸上休息。", [], true), gameOverReason: "精神崩溃" };
   return addLog(next, "event", "新的一天", `第 ${next.day} 天来了，天气是${next.weather}，鱼价已刷新。`, [], false);
 }
@@ -1562,7 +1692,12 @@ function migrateState(raw: Partial<GameState>): GameState {
   const cat = migrateCat(raw.cat);
   const fishingMode = raw.fishingMode === "quick" || raw.fishingMode === "miniGame" ? raw.fishingMode : "miniGame";
   const salvageMode = raw.salvageMode === "quick" || raw.salvageMode === "miniGame" ? raw.salvageMode : "miniGame";
-  const orders = Array.isArray(raw.orders) && raw.orders.length ? raw.orders : createDailyOrders(raw.day ?? 1, raw.boatLevel ?? initial.boatLevel);
+  const reputation = Number.isFinite(raw.reputation) ? Number(raw.reputation) : 0;
+  const weatherEffect = raw.weatherEffect && typeof raw.weatherEffect === "object" && typeof raw.weatherEffect.type === "string"
+    ? { type: raw.weatherEffect.type as WeatherEffect["type"], daysLeft: Math.max(0, Number(raw.weatherEffect.daysLeft ?? 0)) }
+    : undefined;
+  const lastDangerStatus = typeof raw.lastDangerStatus === "string" ? raw.lastDangerStatus : "";
+  const orders = Array.isArray(raw.orders) && raw.orders.length ? raw.orders : createDailyOrders(raw.day ?? 1, raw.boatLevel ?? initial.boatLevel, reputation);
   const garden = Array.isArray(raw.garden)
     ? raw.garden
         .filter((plot) => typeof plot === "object" && plot)
@@ -1594,7 +1729,7 @@ function migrateState(raw: Partial<GameState>): GameState {
   const fishDexRewardsClaimed = Array.isArray(raw.fishDexRewardsClaimed) ? raw.fishDexRewardsClaimed : [];
   const firstCookedRecipeIds = Array.isArray(raw.firstCookedRecipeIds) ? raw.firstCookedRecipeIds.filter((id): id is string => typeof id === "string") : [];
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, salvageMode, orders, garden, lastMoodStatus };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, salvageMode, reputation, weatherEffect, lastDangerStatus, orders, garden, lastMoodStatus };
 }
 
 function readLegacySavedPayload(): { state: GameState; savedAt?: string } | undefined {

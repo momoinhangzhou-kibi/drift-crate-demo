@@ -453,7 +453,7 @@ export const cards: Card[] = [
   { id: "permit", name: "海上便利店许可证", rarity: "Legendary", emoji: "🏪", description: "你的海上商业梦开始发光。", equipment: "shopPermit" },
 ];
 
-export const furniturePool = ["小木桌", "防水床垫", "海上火锅桌", "贝壳灯", "豪华沙发", "迷你温泉", "种植箱"];
+export const furniturePool = ["小木桌", "防水床垫", "海上火锅桌", "贝壳灯", "豪华沙发", "迷你温泉", "种植箱", "防雨篷", "固定锚", "挡风屏", "遮阳棚"];
 
 export const upgradeRequirements: Partial<Record<BoatLevel, Partial<Record<ItemId, number>> & { coins?: number }>> = {
   1: { wood: 10, rope: 5, scrap: 3 },
@@ -492,6 +492,8 @@ export function createInitialState(): GameState {
     firstCookedRecipeIds: [],
     fishingMode: "miniGame",
     salvageMode: "miniGame",
+    reputation: 0,
+    lastDangerStatus: "",
     orders: [],
     garden: [],
     lastMoodStatus: "状态很好",

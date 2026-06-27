@@ -239,6 +239,11 @@ export interface SalvageOption {
   risk: SalvageRisk;
 }
 
+export interface WeatherEffect {
+  type: "寒潮持续" | "高温持续" | "风暴余波";
+  daysLeft: number;
+}
+
 export interface SeaOrder {
   id: string;
   kind: OrderKind;
@@ -295,6 +300,9 @@ export interface GameState {
   firstCookedRecipeIds: string[];
   fishingMode: FishingMode;
   salvageMode: SalvageMode;
+  reputation: number;
+  weatherEffect?: WeatherEffect;
+  lastDangerStatus?: string;
   orders: SeaOrder[];
   garden: GardenPlot[];
   lastMoodStatus?: string;
