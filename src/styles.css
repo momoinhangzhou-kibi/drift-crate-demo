@@ -960,6 +960,15 @@ p {
   z-index: 2;
 }
 
+.raft-asset-image {
+  display: block;
+  width: min(100%, 720px);
+  max-height: clamp(260px, 42vh, 520px);
+  object-fit: contain;
+  margin: 0 auto;
+  filter: drop-shadow(0 22px 28px rgba(24, 77, 94, 0.22));
+}
+
 .boat-roof {
   font-size: clamp(3.2rem, 8vw, 6.5rem);
 }
@@ -1016,6 +1025,20 @@ p {
 .level-3 .boat-body,
 .level-4 .boat-body {
   background: linear-gradient(180deg, #fff0b7, #e8a95d);
+}
+
+.cat-asset-icon {
+  display: block;
+  width: 82px;
+  height: 82px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 12px rgba(38, 80, 92, 0.18));
+}
+
+.cat-asset-icon.large {
+  width: 118px;
+  height: 118px;
+  margin: 0 auto 0.45rem;
 }
 
 .boat-info {
@@ -1223,6 +1246,38 @@ p {
 
 .music-error {
   color: #d84d5b !important;
+}
+
+.shop-purchase-modal {
+  max-width: 520px;
+}
+
+.quantity-control {
+  display: grid;
+  grid-template-columns: auto minmax(72px, 1fr) auto auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 1rem 0;
+}
+
+.quantity-control input {
+  min-width: 0;
+  border: 2px solid #bdebf5;
+  border-radius: 12px;
+  padding: 0.65rem;
+  color: #17647b;
+  font-weight: 900;
+  text-align: center;
+}
+
+.purchase-summary {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.8rem;
+  border-radius: 16px;
+  background: #e8f9ff;
+  color: #17647b;
+  font-weight: 900;
 }
 
 .item-detail-modal {

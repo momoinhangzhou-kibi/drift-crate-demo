@@ -136,6 +136,20 @@ const equipmentNames: Record<string, string> = {
   waterproofBackpack: "防水背包",
 };
 
+const catAssetByType: Record<CatType, string> = {
+  black: `${import.meta.env.BASE_URL}assets/cats/kibi.png`,
+  cow: `${import.meta.env.BASE_URL}assets/cats/xiaopiao.png`,
+  orange: `${import.meta.env.BASE_URL}assets/cats/juzi.png`,
+  calico: `${import.meta.env.BASE_URL}assets/cats/huahua.png`,
+};
+
+const raftAssetByLevel: Record<number, string> = {
+  1: `${import.meta.env.BASE_URL}assets/raft/raft-lv1.png`,
+  2: `${import.meta.env.BASE_URL}assets/raft/raft-lv2.png`,
+  3: `${import.meta.env.BASE_URL}assets/raft/raft-lv3.png`,
+  4: `${import.meta.env.BASE_URL}assets/raft/raft-lv4.png`,
+};
+
 function displayName(name: string) {
   return equipmentNames[name] ?? name;
 }
@@ -190,6 +204,7 @@ function App() {
   const [titlePanel, setTitlePanel] = useState<TitlePanel | undefined>();
   const [selectedItem, setSelectedItem] = useState<ItemId | undefined>();
   const [selectedFurniture, setSelectedFurniture] = useState<string | undefined>();
+  const [selectedShopItem, setSelectedShopItem] = useState<ShopItem | undefined>();
   const [showTutorial, setShowTutorial] = useState(false);
   const [musicOn, setMusicOn] = useState(() => readMusicSettings().on);
   const [musicMode, setMusicMode] = useState<MusicMode>(() => readMusicSettings().mode);
@@ -626,8 +641,7 @@ function App() {
                 {state.weather === "大雾" && <span className="fog-layer"></span>}
               </div>
               <div className={`boat home-level-${state.boatLevel}`}>
-                <div className="boat-roof">{state.boatLevel >= 4 ? "🏪✨" : state.boatLevel >= 3 ? "🏠🪟" : state.boatLevel === 2 ? "⛵🚩" : "🪵📦"}</div>
-                <div className="boat-body">{boatNames[state.boatLevel]}</div>
+                <img className="raft-asset-image" src={raftAssetByLevel[state.boatLevel] ?? raftAssetByLevel[1]} alt={boatNames[state.boatLevel]} />
                 <div className="furniture-strip">{state.furniture.slice(0, 6).map((item) => <span key={item}>{furnitureIcon(item)}</span>)}</div>
                 <div className="stage-cat" title={`${state.cat.name} / ${state.cat.breed}`}>
                   <CatIcon cat={state.cat} />
@@ -695,7 +709,7 @@ function App() {
                 <FishTradeCard key={fishItem.id} fish={fishItem} state={state} onSell={() => openSellPanel(fishItem.id)} />
               ))}
             </div>
-            <TideShop state={state} onBuy={(item) => window.confirm(`购买 ${itemNames[item.id]}，花费 ${item.price} 贝壳币？`) && applyAction("购买", buyShopItem(state, item.id))} />
+            <TideShop state={state} onBuy={setSelectedShopItem} />
           </section>
 
           <section className="panel fishdex-panel">
@@ -803,7 +817,7 @@ function App() {
           onInventoryFilter={setInventoryFilter}
           onItemSelect={setSelectedItem}
           onClose={() => setActivePanel(undefined)}
-          onBuy={(item) => window.confirm(`购买 ${itemNames[item.id]}，花费 ${item.price} 贝壳币？`) && applyAction("购买", buyShopItem(state, item.id))}
+          onBuy={setSelectedShopItem}
           onSellFish={openSellPanel}
           onCook={(recipeId) => applyAction("制作料理", cookRecipe(state, recipeId))}
           onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
@@ -902,6 +916,17 @@ function App() {
           onRemove={(furniture) => {
             applyAction("收起家具", removeFurniture(state, furniture));
             setSelectedFurniture(undefined);
+          }}
+        />
+      )}
+      {selectedShopItem && (
+        <ShopPurchaseModal
+          state={state}
+          item={selectedShopItem}
+          onClose={() => setSelectedShopItem(undefined)}
+          onConfirm={(amount) => {
+            applyAction("购买", buyShopItem(state, selectedShopItem.id, amount));
+            setSelectedShopItem(undefined);
           }}
         />
       )}
@@ -1084,11 +1109,9 @@ function FeedbackSection({ title, tone, lines }: { title: string; tone: "gain" |
   );
 }
 
-function CatIcon({ cat, size = "normal" }: { cat: Pick<CatState | CatOption, "iconClass" | "breed">; size?: "normal" | "large" }) {
+function CatIcon({ cat, size = "normal" }: { cat: Pick<CatState | CatOption, "type" | "breed">; size?: "normal" | "large" }) {
   return (
-    <span className={`cat-css-icon ${cat.iconClass} ${size === "large" ? "large" : ""}`} aria-label={cat.breed} role="img">
-      <span className="cat-css-face" aria-hidden="true"></span>
-    </span>
+    <img className={`cat-asset-icon ${size === "large" ? "large" : ""}`} src={catAssetByType[cat.type]} alt={cat.breed} />
   );
 }
 
@@ -1698,6 +1721,45 @@ function TideShop({ state, onBuy }: { state: GameState; onBuy: (item: ShopItem) 
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function ShopPurchaseModal({ state, item, onClose, onConfirm }: { state: GameState; item: ShopItem; onClose: () => void; onConfirm: (amount: number) => void }) {
+  const [amount, setAmount] = useState(1);
+  const maxByCoins = Math.floor(state.coins / item.price);
+  const maxAmount = Math.max(0, Math.min(item.quantity, maxByCoins || 0));
+  const safeAmount = Math.min(Math.max(1, amount), Math.max(1, item.quantity));
+  const total = item.price * safeAmount;
+  const canBuy = safeAmount <= item.quantity && total <= state.coins;
+  const setSafeAmount = (value: number) => setAmount(Math.min(Math.max(1, Math.floor(value) || 1), Math.max(1, item.quantity)));
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="crate-modal shop-purchase-modal" onClick={(event) => event.stopPropagation()}>
+        <span className="modal-emoji">{itemEmoji[item.id]}</span>
+        <p className="eyebrow">潮汐商店</p>
+        <h2>{itemNames[item.id]}</h2>
+        <p>单价：{item.price} 贝壳币 · 库存 x{item.quantity}</p>
+        <div className="quantity-control">
+          <button onClick={() => setSafeAmount(safeAmount - 1)}>-</button>
+          <input value={safeAmount} min={1} max={item.quantity} type="number" onChange={(event) => setSafeAmount(Number(event.target.value))} />
+          <button onClick={() => setSafeAmount(safeAmount + 1)}>+</button>
+          <button onClick={() => setSafeAmount(Math.max(1, maxAmount))}>MAX</button>
+          <button onClick={() => setSafeAmount(Math.max(1, maxAmount))}>全部买完</button>
+        </div>
+        <div className="purchase-summary">
+          <span>当前数量：x{safeAmount}</span>
+          <span>总价：{total} 贝壳币</span>
+          <span>当前金币：{state.coins} 贝壳币</span>
+          <span className={canBuy ? "ready" : "warning"}>购买后剩余：{state.coins - total} 贝壳币</span>
+          {!canBuy && <span className="warning">金币不足或超过库存。</span>}
+        </div>
+        <div className="modal-actions">
+          <button onClick={onClose}>取消</button>
+          <button className="primary-action" disabled={!canBuy} onClick={() => onConfirm(safeAmount)}>确认购买</button>
+        </div>
+      </section>
     </div>
   );
 }

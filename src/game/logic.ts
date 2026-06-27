@@ -635,18 +635,20 @@ export function buyItem(state: GameState, itemId: "commonCrate" | "premiumCrate"
   return addLog(next, "trade", "购买物资", `你买下了 ${itemNames[itemId]} x1。`, [itemNames[itemId]]);
 }
 
-export function buyShopItem(state: GameState, itemId: ItemId): GameState {
+export function buyShopItem(state: GameState, itemId: ItemId, amount = 1): GameState {
   const shopItem = state.shopStock.find((item) => item.id === itemId);
   if (!shopItem || shopItem.quantity <= 0) return addLog(state, "warning", "潮汐商店", "这件商品已经卖完了。");
   const discount = state.equipment.includes("shopPermit") || state.inventory.merchantCoupon > 0 ? 0.9 : 1;
   const price = Math.ceil(shopItem.price * discount);
-  if (state.coins < price) return addLog(state, "warning", "贝壳币不足", `还差 ${price - state.coins} 贝壳币，买不起${itemNames[itemId]}。`);
-  const shopStock = state.shopStock.map((item) => item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item);
-  let next = addItem({ ...state, coins: state.coins - price, shopStock }, itemId, 1);
+  const safeAmount = Math.max(1, Math.min(Math.floor(amount), shopItem.quantity, Math.floor(state.coins / price)));
+  if (safeAmount <= 0) return addLog(state, "warning", "贝壳币不足", `贝壳币不足，买不起${itemNames[itemId]}。`);
+  const total = price * safeAmount;
+  const shopStock = state.shopStock.map((item) => item.id === itemId ? { ...item, quantity: item.quantity - safeAmount } : item);
+  let next = addItem({ ...state, coins: state.coins - total, shopStock }, itemId, safeAmount);
   if (["sturdyRod", "advancedRodItem", "fishingNet", "solarPurifier", "waterproofBackpack", "autoFisher"].includes(itemId) && !next.equipment.includes(itemId)) {
     next = { ...next, equipment: [...next.equipment, itemId] };
   }
-  return addLog(next, "trade", "潮汐商店", `买下${itemNames[itemId]} x1，花费 ${price} 贝壳币。`, [`${itemNames[itemId]} x1`]);
+  return addLog(next, "trade", "潮汐商店", `买下${itemNames[itemId]} x${safeAmount}，花费 ${total} 贝壳币。`, [`${itemNames[itemId]} x${safeAmount}`]);
 }
 
 export function cookRecipe(state: GameState, recipeId: string): GameState {
