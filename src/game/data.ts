@@ -419,6 +419,7 @@ export const cards: Card[] = [
   { id: "plastic", name: "塑料", rarity: "Common", emoji: "🧴", description: "轻轻漂着的基础材料。", itemId: "plastic", amount: 3 },
   { id: "fish-snack", name: "海味小礼包", rarity: "Common", emoji: "🐟", description: "随机获得 2 条 Common 鱼。", fishRarity: "Common", amount: 2 },
   { id: "water", name: "淡水", rarity: "Common", emoji: "💧", description: "干净淡水，做饭和生存都需要。", itemId: "water", amount: 2 },
+  { id: "garden-starter", name: "菜园入门箱", rarity: "Common", emoji: "🪴", description: "一个能固定在木筏边缘的小种植箱。", itemId: "planterBox", amount: 1 },
   { id: "lettuce-seeds", name: "生菜种子包", rarity: "Common", emoji: "🌱", description: "适合漂浮菜园的入门种子。", itemId: "lettuceSeed", amount: 2 },
   { id: "tomato-seeds", name: "番茄种子包", rarity: "Common", emoji: "🌱", description: "海风里也能发芽的小番茄种子。", itemId: "tomatoSeed", amount: 2 },
   { id: "scrap", name: "铁片", rarity: "Rare", emoji: "🔩", description: "能让木筏更结实的金属材料。", itemId: "scrap", amount: 3 },
@@ -503,7 +504,7 @@ export function createShopStock(day: number): ShopItem[] {
   };
   const pool = shopCatalog.filter((item) => early ? ["materials", "food", "hygiene", "tools", "special"].includes(item.category) && item.rarity !== "Epic" : true);
   const picked = pool.filter((item) => rand() < (item.rarity === "Epic" ? 0.18 : item.rarity === "Rare" ? 0.35 : 0.55)).slice(0, early ? 10 : 14);
-  const guaranteed = shopCatalog.filter((item) => item.id === "commonCrate" || (!early && item.id === "premiumCrate"));
+  const guaranteed = shopCatalog.filter((item) => item.id === "commonCrate" || item.id === "planterBox" || item.id === "lettuceSeed" || item.id === "tomatoSeed" || (!early && item.id === "premiumCrate"));
   if (rand() < (early ? 0.12 : 0.2)) {
     const furnitureTicket = shopCatalog.find((item) => item.id === "furnitureTicket");
     if (furnitureTicket) guaranteed.push({ ...furnitureTicket, quantity: 1 });
