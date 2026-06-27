@@ -18,7 +18,7 @@ import {
   upgradeRequirements,
   weatherList,
 } from "./data";
-import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishRarity, GameState, ItemId, LogType, Rarity, Recipe, TalentId, TradePrices, Weather } from "./types";
+import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishRarity, GameState, ItemId, LogType, Rarity, Recipe, SeaOrder, TalentId, TradePrices, Weather } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
 const SAVE_SLOTS_KEY = "drift-crate-save-slots";
@@ -65,6 +65,14 @@ function randomInt(min: number, max: number) {
 
 function pick<T>(list: T[]) {
   return list[Math.floor(Math.random() * list.length)];
+}
+
+export function getMoodStatus(mood: number) {
+  if (mood >= 80) return "状态很好";
+  if (mood >= 60) return "平稳";
+  if (mood >= 40) return "有点低落";
+  if (mood >= 20) return "疲惫";
+  return "崩溃边缘";
 }
 
 function updateCat(state: GameState, patch: Partial<CatState>): GameState {
@@ -396,7 +404,25 @@ export function getSurvivalInfo(state: GameState) {
   const moodState = state.mood >= 80 ? "状态很好" : state.mood >= 60 ? "平稳" : state.mood >= 40 ? "有点低落" : state.mood >= 20 ? "疲惫" : "崩溃边缘";
   const boatState = hpRate >= 0.7 ? "稳定" : hpRate >= 0.4 ? "受损" : state.boatHp > 0 ? "严重受损" : "沉没";
   const danger = state.day <= 3 ? "低" : nextDisasterIn <= 2 && state.day >= 5 ? "高" : state.day <= 7 ? "中" : "中";
-  return { phase, nextDisasterIn, danger, hungerState, moodState, boatState };
+  return { phase, nextDisasterIn, danger, hungerState, moodState, boatState, moodStatus: getMoodStatus(state.mood) };
+}
+
+export function createDailyOrders(day: number, boatLevel: BoatLevel = 1): SeaOrder[] {
+  const advanced = day >= 8 || boatLevel >= 4;
+  const pool: SeaOrder[] = [
+    { id: `mat-${day}`, kind: "material", title: "修船材料委托", story: "路过的小船需要基础材料。", itemCost: { wood: 4, rope: 1 }, rewardCoins: 32, rewardItems: { commonCrate: 1 } },
+    { id: `food-${day}`, kind: "food", title: "热汤外送", story: "隔壁木筏想换一碗热汤。", itemCost: { fishSoup: 1 }, rewardCoins: 45, rewardMood: 2 },
+    { id: `fish-${day}`, kind: "fish", title: "今日鱼获收购", story: "商船厨房想收几条普通鱼。", fishRarityCost: "Common", fishCount: 3, rewardCoins: 38 },
+    { id: `cat-${day}`, kind: "cat", title: "猫猫招待员", story: "客人想看看精神饱满的看板猫。", catMoodRequired: 60, catIntimacyRequired: 20, rewardCoins: 30, rewardCatIntimacy: 1 },
+    { id: `rescue-${day}`, kind: "rescue", title: "灾害救援补给", story: "远处木筏发来防灾求助。", itemCost: { tarp: 1, water: 1 }, rewardCoins: 60, rewardItems: { repairTape: 1 } },
+  ];
+  if (advanced) {
+    pool.push(
+      { id: `hotpot-${day}`, kind: "food", title: "补给站招牌火锅", story: "海上补给站开张，客人点名要热闹一点。", itemCost: { driftHotpot: 1 }, rewardCoins: 120, rewardItems: { premiumCrate: 1 }, rewardMood: 3 },
+      { id: `rarefish-${day}`, kind: "fish", title: "稀有鱼展示订单", story: "收藏商想买一条稀有鱼。", fishRarityCost: "Rare", fishCount: 1, rewardCoins: 95, rewardItems: { furnitureTicket: 1 } },
+    );
+  }
+  return [...pool].sort(() => Math.random() - 0.5).slice(0, advanced ? 3 : 2);
 }
 
 export function startGame(talent: TalentId, catType: CatType = "black"): GameState {
@@ -412,6 +438,8 @@ export function startGame(talent: TalentId, catType: CatType = "black"): GameSta
     tradePrices: createLegacyPrices(),
     fishPrices: createFishPrices(),
     shopStock: createShopStock(1),
+    orders: createDailyOrders(1, baseState.boatLevel),
+    lastMoodStatus: getMoodStatus(baseState.mood + (cat.type === "black" ? 3 : 0)),
     equipment: [...new Set([...(selectedTalent.startingEquipment ?? [])])],
   };
   Object.entries(selectedTalent.startingItems ?? {}).forEach(([itemId, amount]) => {
@@ -452,6 +480,23 @@ export function fish(state: GameState): GameState {
     next = addLog(next, "event", "猫猫伙伴", `${state.cat.emoji} ${state.cat.name} 对今天的鱼获很满意，你的 Mood +1。`, ["Mood +1"]);
   }
 
+  return next;
+}
+
+export function fishWithMiniGame(state: GameState, result: "fail" | "success" | "perfect"): GameState {
+  if (result === "fail") {
+    const hungerLoss = state.talent === "fishing" ? 2 : 4;
+    return addLog({ ...state, hunger: clamp(state.hunger - hungerLoss) }, "warning", "鱼跑了", `收杆慢了一点，鱼从钩边溜走了。Hunger -${hungerLoss}。`, [`Hunger -${hungerLoss}`]);
+  }
+  if (result === "success") return fish(state);
+  if (state.hunger <= 0) return addLog(state, "warning", "体力不足", "你饿得头晕，先找点吃的再钓鱼吧。");
+  const rareRoll = Math.random();
+  const targetRarity: FishRarity = rareRoll < 0.08 ? "Legendary" : rareRoll < 0.22 ? "Epic" : rareRoll < 0.58 ? "Rare" : weightedRarity(state);
+  const caught = pickFish(state, targetRarity);
+  const amount = state.equipment.includes("goldenRod") && Math.random() < 0.35 ? 2 : 1;
+  const resultState = addFish({ ...state, hunger: clamp(state.hunger - 5), mood: clamp(state.mood + (state.equipment.includes("goldenRod") ? 2 : 1)) }, caught, amount);
+  let next = addLog(resultState.state, "fishing", "完美收杆", `完美收杆！你钓到了「${caught.name}」x${amount}。`, [`${caught.emoji} ${caught.name} x${amount}`, `Mood +${state.equipment.includes("goldenRod") ? 2 : 1}`], true);
+  if (resultState.isNew) next = addLog(next, "discovery", "新发现", `首次钓到「${caught.name}」！已加入钓鱼图鉴。`, [caught.rarity], true, true);
   return next;
 }
 
@@ -623,6 +668,60 @@ export function sellSelectedFish(state: GameState, selections: Record<string, nu
 
   const message = `卖出${sold.join("、")}，获得 ${earned} 贝壳币。${soldRareFish ? "希望你不是手滑。" : ""}`;
   return addLog({ ...state, fishCollection, coins: state.coins + earned }, "trade", "出售鱼获", message, [`+${earned} 贝壳币`], soldRareFish);
+}
+
+function orderMissing(state: GameState, order: SeaOrder) {
+  const missing: string[] = [];
+  Object.entries(order.itemCost ?? {}).forEach(([id, amount]) => {
+    const itemId = id as ItemId;
+    if ((state.inventory[itemId] ?? 0) < (amount ?? 0)) missing.push(`${itemNames[itemId]} ×${(amount ?? 0) - (state.inventory[itemId] ?? 0)}`);
+  });
+  if (order.fishRarityCost && order.fishCount) {
+    const owned = fishList.filter((fishItem) => fishItem.rarity === order.fishRarityCost).reduce((sum, fishItem) => sum + (state.fishCollection[fishItem.id]?.count ?? 0), 0);
+    if (owned < order.fishCount) missing.push(`${order.fishRarityCost} 鱼 ×${order.fishCount - owned}`);
+  }
+  if (order.catMoodRequired && state.cat.mood < order.catMoodRequired) missing.push(`猫心情 ${state.cat.mood}/${order.catMoodRequired}`);
+  if (order.catIntimacyRequired && state.cat.intimacy < order.catIntimacyRequired) missing.push(`猫亲密 ${state.cat.intimacy}/${order.catIntimacyRequired}`);
+  return missing;
+}
+
+export function canCompleteOrder(state: GameState, order: SeaOrder) {
+  return orderMissing(state, order).length === 0;
+}
+
+export function completeOrder(state: GameState, orderId: string): GameState {
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) return addLog(state, "warning", "订单", "这张订单已经被海风吹走了。");
+  const missing = orderMissing(state, order);
+  if (missing.length) return addLog(state, "warning", "订单材料不足", `还缺：${missing.join("、")}。`);
+
+  let next = spendItems(state, order.itemCost ?? {});
+  if (order.fishRarityCost && order.fishCount) {
+    let need = order.fishCount;
+    const fishCollection = { ...next.fishCollection };
+    fishList.filter((fishItem) => fishItem.rarity === order.fishRarityCost).sort((a, b) => a.basePrice - b.basePrice).forEach((fishItem) => {
+      const entry = fishCollection[fishItem.id];
+      if (!entry || need <= 0) return;
+      const used = Math.min(need, entry.count);
+      fishCollection[fishItem.id] = { ...entry, count: entry.count - used };
+      need -= used;
+    });
+    next = { ...next, fishCollection };
+  }
+  const bonusCoins = state.boatLevel >= 4 ? 12 : 0;
+  const moodBonusCoins = state.mood >= 80 && Math.random() < 0.25 ? 8 : 0;
+  next = { ...next, coins: next.coins + (order.rewardCoins ?? 0) + bonusCoins + moodBonusCoins, mood: clamp(next.mood + (order.rewardMood ?? 0)) };
+  Object.entries(order.rewardItems ?? {}).forEach(([id, amount]) => {
+    next = addItem(next, id as ItemId, amount ?? 0);
+  });
+  if (order.rewardCatIntimacy) next = updateCat(next, { intimacy: next.cat.intimacy + order.rewardCatIntimacy });
+  next = { ...next, orders: next.orders.filter((item) => item.id !== orderId) };
+  return addLog(next, "trade", "海上订单", `完成「${order.title}」，海上补给站的名声更响了。`, [`+${(order.rewardCoins ?? 0) + bonusCoins + moodBonusCoins} 贝壳币`, ...(bonusCoins ? ["满级补给站奖励 +12"] : []), ...(moodBonusCoins ? ["Mood 奖励 +8"] : [])], true);
+}
+
+export function abandonOrder(state: GameState, orderId: string): GameState {
+  const order = state.orders.find((item) => item.id === orderId);
+  return addLog({ ...state, orders: state.orders.filter((item) => item.id !== orderId) }, "trade", "放弃订单", `你放弃了「${order?.title ?? "一张订单"}」。`, []);
 }
 
 export function buyItem(state: GameState, itemId: "commonCrate" | "premiumCrate" | "water" | "wood"): GameState {
@@ -1144,6 +1243,7 @@ function applyDisaster(state: GameState, weather: Weather): GameState {
 
 export function endDay(state: GameState): GameState {
   if (state.gameOverReason) return state;
+  const beforeMoodStatus = getMoodStatus(state.mood);
   const info = getSurvivalInfo(state);
   const disasterDay = state.day >= 7 && info.nextDisasterIn === 0;
   const nextWeather = disasterDay ? pick(disasterWeather) : pick(weatherList);
@@ -1164,6 +1264,7 @@ export function endDay(state: GameState): GameState {
     tradePrices: createLegacyPrices(),
     newestFishId: undefined,
     shopStock: state.day % 7 === 0 ? createShopStock(state.day + 1) : state.shopStock,
+    orders: createDailyOrders(state.day + 1, state.boatLevel),
   };
 
   if (state.day % 7 === 0) next = addLog(next, "trade", "潮汐商店", "潮汐商店刷新了新的库存。");
@@ -1204,6 +1305,21 @@ export function endDay(state: GameState): GameState {
     const catWarnChance = next.cat.type === "black" ? 0.7 : 0.35;
     if (Math.random() < catWarnChance) next = addLog(next, "event", "猫咪预警", `${next.cat.emoji} ${next.cat.name} 一直盯着海平线，像是在提醒你准备修船和防水布。`, [], true);
   }
+  const afterMoodStatus = getMoodStatus(next.mood);
+  if (afterMoodStatus !== beforeMoodStatus) {
+    const moodMessage = afterMoodStatus === "状态很好"
+      ? "你今天状态很好，钓鱼和开箱都更容易抓住好运。"
+      : afterMoodStatus === "平稳"
+        ? "心情回到平稳，海风也显得温柔了一点。"
+        : afterMoodStatus === "有点低落"
+          ? "你有点低落，连海风都显得冷了一点。"
+          : afterMoodStatus === "疲惫"
+            ? "你感到疲惫，做事需要更集中一点。"
+            : "你已经在崩溃边缘，最好吃点热食、陪陪猫或休息一下。";
+    next = addLog({ ...next, lastMoodStatus: afterMoodStatus }, afterMoodStatus === "状态很好" || afterMoodStatus === "平稳" ? "event" : "warning", "心情状态变化", moodMessage, [`Mood：${afterMoodStatus}`], afterMoodStatus === "崩溃边缘" || afterMoodStatus === "疲惫");
+  } else {
+    next = { ...next, lastMoodStatus: afterMoodStatus };
+  }
   if (next.boatHp <= 0) next = { ...addLog(next, "warning", "结局", "木筏沉没了，你被路过商船救起。", [], true), gameOverReason: "木筏沉没" };
   else if (next.hunger <= 0 && Math.random() < 0.35) next = { ...addLog(next, "warning", "结局", "你饿得没有力气继续漂流，被救援船带离。", [], true), gameOverReason: "饥饿濒危" };
   else if (next.mood <= 0 && Math.random() < 0.3) next = { ...addLog(next, "warning", "结局", "你决定结束这次漂流生活，回到岸上休息。", [], true), gameOverReason: "精神崩溃" };
@@ -1237,6 +1353,9 @@ function migrateState(raw: Partial<GameState>): GameState {
   const inventory = { ...initial.inventory, ...(raw.inventory ?? {}) };
   const shopStock = raw.shopStock?.length ? raw.shopStock : createShopStock(raw.day ?? 1);
   const cat = migrateCat(raw.cat);
+  const fishingMode = raw.fishingMode === "quick" || raw.fishingMode === "miniGame" ? raw.fishingMode : "miniGame";
+  const orders = Array.isArray(raw.orders) && raw.orders.length ? raw.orders : createDailyOrders(raw.day ?? 1, raw.boatLevel ?? initial.boatLevel);
+  const lastMoodStatus = typeof raw.lastMoodStatus === "string" ? raw.lastMoodStatus : getMoodStatus(raw.mood ?? initial.mood);
   const logs = Array.isArray(raw.logs)
     ? raw.logs
         .filter((log) => typeof log === "object" && log)
@@ -1256,7 +1375,7 @@ function migrateState(raw: Partial<GameState>): GameState {
   const fishDexRewardsClaimed = Array.isArray(raw.fishDexRewardsClaimed) ? raw.fishDexRewardsClaimed : [];
   const firstCookedRecipeIds = Array.isArray(raw.firstCookedRecipeIds) ? raw.firstCookedRecipeIds.filter((id): id is string => typeof id === "string") : [];
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, orders, lastMoodStatus };
 }
 
 function readLegacySavedPayload(): { state: GameState; savedAt?: string } | undefined {

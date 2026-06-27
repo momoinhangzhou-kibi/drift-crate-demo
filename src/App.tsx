@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { boatNames, catOptions, fishList, foodItems, itemEmoji, itemMeta, itemNames, recipes, talents } from "./game/data";
 import {
+  abandonOrder,
   buyShopItem,
   canCookAnyRecipe,
+  canCompleteOrder,
   canUpgradeBoat,
+  completeOrder,
   cookRecipe,
   decorate,
   deleteSaveSlot,
@@ -14,6 +17,7 @@ import {
   autosaveGame,
   getActiveSaveId,
   fish,
+  fishWithMiniGame,
   getCatFeedOptions,
   getRecipeStatus,
   getRepairPreview,
@@ -21,6 +25,7 @@ import {
   getUpgradeCost,
   getSaveSummary,
   getSaveSlots,
+  getMoodStatus,
   getSurvivalInfo,
   hasEdibleFood,
   hasFishToSell,
@@ -47,7 +52,7 @@ import {
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
 import type { SaveSlot } from "./game/logic";
-import { CatFeedOption, CatOption, CatState, CatType, Fish, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, ShopItem, TalentId } from "./game/types";
+import { CatFeedOption, CatOption, CatState, CatType, Fish, FishingMode, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, SeaOrder, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
   "wood",
@@ -67,7 +72,7 @@ const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "grilledFishSkewer", "se
 const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
 
 type ViewState = "title" | "talentSelect" | "catSelect" | "playing" | "loadMenu";
-type ModulePanel = "inventory" | "shop" | "dex" | "recipes" | "journal" | "cat" | "home" | "guide" | "settings";
+type ModulePanel = "inventory" | "shop" | "orders" | "dex" | "recipes" | "journal" | "cat" | "home" | "guide" | "settings";
 type TitlePanel = "dex" | "settings";
 type FeedbackRarity = Rarity | FishRarity | "Uncommon";
 type FeedbackLine = {
@@ -200,6 +205,7 @@ function App() {
   const [showEating, setShowEating] = useState(false);
   const [showSelling, setShowSelling] = useState(false);
   const [showCat, setShowCat] = useState(false);
+  const [showFishingGame, setShowFishingGame] = useState(false);
   const [activePanel, setActivePanel] = useState<ModulePanel | undefined>();
   const [titlePanel, setTitlePanel] = useState<TitlePanel | undefined>();
   const [selectedItem, setSelectedItem] = useState<ItemId | undefined>();
@@ -232,6 +238,7 @@ function App() {
   const readyToUpgrade = canUpgradeBoat(state);
   const readyToDecorate = state.inventory.furnitureTicket > 0;
   const readyToSell = hasFishToSell(state);
+  const readyToDeliverOrder = state.orders.some((order) => canCompleteOrder(state, order));
   const discoveredCount = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
   const completion = Math.round((discoveredCount / fishList.length) * 100);
   const survival = getSurvivalInfo(state);
@@ -617,7 +624,7 @@ function App() {
           <Status label="危险等级" value={survival.danger} danger={survival.danger === "高"} />
           <Status label="Weather" value={state.weather} />
           <Status label="Hunger" value={state.hunger} danger={state.hunger <= 15} />
-          <Status label="Mood" value={state.mood} />
+          <Status label="Mood" value={`${state.mood} · ${survival.moodStatus}`} danger={state.mood < 40} />
           <Status label="Coins" value={`${state.coins} 🐚`} />
           <Status label="Boat HP" value={`${state.boatHp}/${state.boatMaxHp}`} danger={state.boatHp / state.boatMaxHp < 0.4} />
           <Status label="Boat Level" value={`Lv.${state.boatLevel}`} />
@@ -657,13 +664,13 @@ function App() {
               <p>状态：Hunger {survival.hungerState} / Mood {survival.moodState} / 船体{survival.boatState}</p>
               <p>当前钓具：{state.equipment.includes("goldenRod") ? "黄金鱼竿" : state.equipment.includes("advancedRodItem") || state.equipment.includes("advancedRod") ? "高级钓鱼竿" : state.equipment.includes("sturdyRod") ? "结实钓鱼竿" : "旧钓鱼竿"}</p>
               <h3>下次升级</h3>
-              {state.boatLevel >= 4 ? <p>已达到 Demo 最高等级。</p> : <RequirementList state={state} items={upgradeCost.items} coins={upgradeCost.coins} />}
+              {state.boatLevel >= 4 ? <p>海上补给站已建成，可以通过订单继续经营。</p> : <RequirementList state={state} items={upgradeCost.items} coins={upgradeCost.coins} />}
               {state.boatHp / state.boatMaxHp < 0.4 && <strong className="warning">船体严重受损。下一次灾害前请尽快修理、升级或准备防水布。</strong>}
             </div>
           </section>
 
           <section className="actions panel action-dock">
-            <ActionButton onClick={() => applyAction("钓鱼", fish(state))}>🎣 钓鱼</ActionButton>
+            <ActionButton onClick={() => state.fishingMode === "quick" ? applyAction("钓鱼", fish(state)) : setShowFishingGame(true)}>🎣 钓鱼<small>{state.fishingMode === "quick" ? "快速钓鱼" : "小游戏钓鱼"}</small></ActionButton>
             <ActionButton onClick={() => applyAction("打捞", salvage(state))}>🪝 打捞</ActionButton>
             <ActionButton badge={state.inventory.commonCrate > 0 ? "可开" : undefined} onClick={() => openCrateAndShow("commonCrate")}>
               🎁 开普通包 x{state.inventory.commonCrate}<small>消耗普通包 x1</small>
@@ -682,6 +689,7 @@ function App() {
               🍽 进食
             </ActionButton>
             <ActionButton onClick={() => setActivePanel("shop")}>🛒 商店</ActionButton>
+            <ActionButton badge={readyToDeliverOrder ? "可交付" : undefined} onClick={() => setActivePanel("orders")}>📦 订单</ActionButton>
             <ActionButton onClick={() => setActivePanel("cat")}>猫 猫猫</ActionButton>
             <ActionButton badge={readyToDecorate ? "可布置" : undefined} onClick={() => applyAction("布置家具", decorate(state))}>
               🪑 布置家具
@@ -819,6 +827,8 @@ function App() {
           onClose={() => setActivePanel(undefined)}
           onBuy={setSelectedShopItem}
           onSellFish={openSellPanel}
+          onCompleteOrder={(orderId) => applyAction("完成订单", completeOrder(state, orderId))}
+          onAbandonOrder={(orderId) => applyAction("放弃订单", abandonOrder(state, orderId))}
           onCook={(recipeId) => applyAction("制作料理", cookRecipe(state, recipeId))}
           onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
           onPetCat={() => applyAction("抚摸猫猫", petCat(state))}
@@ -837,6 +847,7 @@ function App() {
             setCurrentTrackId(mode === "random" ? pickMusicTrack(currentTrackId).id : mode);
             setMusicError(undefined);
           }}
+          onFishingModeChange={(mode) => update({ ...state, fishingMode: mode })}
           onNextTrack={playNextTrack}
           onSave={saveCurrentGame}
           onSaveAs={saveAsNewSlot}
@@ -927,6 +938,16 @@ function App() {
           onConfirm={(amount) => {
             applyAction("购买", buyShopItem(state, selectedShopItem.id, amount));
             setSelectedShopItem(undefined);
+          }}
+        />
+      )}
+      {showFishingGame && (
+        <FishingMiniGame
+          state={state}
+          onClose={() => setShowFishingGame(false)}
+          onFinish={(result) => {
+            setShowFishingGame(false);
+            applyAction("钓鱼", fishWithMiniGame(state, result));
           }}
         />
       )}
@@ -1127,6 +1148,7 @@ function catBubble(cat: CatState) {
 const moduleItems: { id: ModulePanel; icon: string; label: string }[] = [
   { id: "inventory", icon: "箱", label: "背包" },
   { id: "shop", icon: "店", label: "商店" },
+  { id: "orders", icon: "单", label: "订单" },
   { id: "dex", icon: "鱼", label: "图鉴" },
   { id: "recipes", icon: "锅", label: "菜谱" },
   { id: "journal", icon: "日", label: "日记" },
@@ -1160,6 +1182,8 @@ function GameModulePanel({
   onClose,
   onBuy,
   onSellFish,
+  onCompleteOrder,
+  onAbandonOrder,
   onCook,
   onFeedCat,
   onPetCat,
@@ -1173,6 +1197,7 @@ function GameModulePanel({
   musicError,
   onToggleMusic,
   onMusicModeChange,
+  onFishingModeChange,
   onNextTrack,
   onSave,
   onSaveAs,
@@ -1190,6 +1215,8 @@ function GameModulePanel({
   onClose: () => void;
   onBuy: (item: ShopItem) => void;
   onSellFish: (fishId?: string) => void;
+  onCompleteOrder: (orderId: string) => void;
+  onAbandonOrder: (orderId: string) => void;
   onCook: (recipeId: string) => void;
   onFeedCat: (optionId: string) => void;
   onPetCat: () => void;
@@ -1203,6 +1230,7 @@ function GameModulePanel({
   musicError?: string;
   onToggleMusic: () => void;
   onMusicModeChange: (mode: MusicMode) => void;
+  onFishingModeChange: (mode: FishingMode) => void;
   onNextTrack: () => void;
   onSave: () => void;
   onSaveAs: () => void;
@@ -1237,6 +1265,8 @@ function GameModulePanel({
             <TideShop state={state} onBuy={onBuy} />
           </div>
         )}
+
+        {panel === "orders" && <OrdersPanel state={state} onComplete={onCompleteOrder} onAbandon={onAbandonOrder} />}
 
         {panel === "dex" && (
           <>
@@ -1274,6 +1304,17 @@ function GameModulePanel({
 
         {panel === "settings" && (
           <div className="settings-grid">
+            <div className="music-settings-card">
+              <div>
+                <strong>🎣 钓鱼模式</strong>
+                <p>当前模式：{state.fishingMode === "miniGame" ? "小游戏钓鱼" : "快速钓鱼"}</p>
+                <p>小游戏会根据鱼竿、天赋和 Mood 调整成功区域；快速钓鱼保留原本一键体验。</p>
+              </div>
+              <select value={state.fishingMode} onChange={(event) => onFishingModeChange(event.target.value as FishingMode)}>
+                <option value="miniGame">小游戏钓鱼</option>
+                <option value="quick">快速钓鱼</option>
+              </select>
+            </div>
             <div className="music-settings-card">
               <div>
                 <strong>🎵 背景音乐</strong>
@@ -1700,6 +1741,157 @@ function ActionButton({ badge, className = "", children, onClick }: { badge?: st
       {badge && <span className="button-badge">{badge}</span>}
       {children}
     </button>
+  );
+}
+
+function getFishingZones(state: GameState) {
+  let successWidth = 32;
+  let perfectWidth = 8;
+  if (state.equipment.includes("sturdyRod")) successWidth += 8;
+  if (state.equipment.includes("advancedRod") || state.equipment.includes("advancedRodItem")) {
+    successWidth += 14;
+    perfectWidth += 2;
+  }
+  if (state.equipment.includes("goldenRod")) {
+    successWidth += 20;
+    perfectWidth += 4;
+  }
+  if (state.talent === "fishing") successWidth += 6;
+  if (state.mood >= 80) perfectWidth += 4;
+  else if (state.mood < 40) successWidth -= 8;
+  const success = Math.max(22, Math.min(68, successWidth));
+  const perfect = Math.max(6, Math.min(18, perfectWidth));
+  return {
+    successStart: 50 - success / 2,
+    successEnd: 50 + success / 2,
+    perfectStart: 50 - perfect / 2,
+    perfectEnd: 50 + perfect / 2,
+  };
+}
+
+function FishingMiniGame({ state, onClose, onFinish }: { state: GameState; onClose: () => void; onFinish: (result: "fail" | "success" | "perfect") => void }) {
+  const [pointer, setPointer] = useState(0);
+  const [direction, setDirection] = useState(1);
+  const zones = getFishingZones(state);
+  const rodName = state.equipment.includes("goldenRod")
+    ? "黄金钓鱼竿"
+    : state.equipment.includes("advancedRodItem") || state.equipment.includes("advancedRod")
+      ? "高级钓鱼竿"
+      : state.equipment.includes("sturdyRod")
+        ? "结实钓鱼竿"
+        : "旧钓鱼竿";
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setPointer((value) => {
+        const next = value + direction * 2.6;
+        if (next >= 100) {
+          setDirection(-1);
+          return 100;
+        }
+        if (next <= 0) {
+          setDirection(1);
+          return 0;
+        }
+        return next;
+      });
+    }, 24);
+    return () => window.clearInterval(timer);
+  }, [direction]);
+
+  const reelIn = () => {
+    const result = pointer >= zones.perfectStart && pointer <= zones.perfectEnd
+      ? "perfect"
+      : pointer >= zones.successStart && pointer <= zones.successEnd
+        ? "success"
+        : "fail";
+    onFinish(result);
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="crate-modal fishing-mini-modal" onClick={(event) => event.stopPropagation()}>
+        <span className="modal-emoji">🎣</span>
+        <p className="eyebrow">Fishing Mini Game</p>
+        <h2>看准时机收杆</h2>
+        <p>{rodName} · Mood {state.mood}（{getMoodStatus(state.mood)}）</p>
+        <div className="fishing-meter">
+          <span className="success-zone" style={{ left: `${zones.successStart}%`, width: `${zones.successEnd - zones.successStart}%` }} />
+          <span className="perfect-zone" style={{ left: `${zones.perfectStart}%`, width: `${zones.perfectEnd - zones.perfectStart}%` }} />
+          <span className="fishing-pointer" style={{ left: `${pointer}%` }} />
+        </div>
+        <div className="fishing-legend">
+          <span><i className="legend-success" /> 成功</span>
+          <span><i className="legend-perfect" /> 完美：稀有率提升</span>
+        </div>
+        <div className="modal-actions">
+          <button onClick={onClose}>放弃</button>
+          <button className="primary-action" onClick={reelIn}>收杆</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function OrdersPanel({ state, onComplete, onAbandon }: { state: GameState; onComplete: (orderId: string) => void; onAbandon: (orderId: string) => void }) {
+  const orderNeedLines = (order: SeaOrder) => {
+    const lines: { label: string; ready: boolean }[] = [];
+    Object.entries(order.itemCost ?? {}).forEach(([id, amount]) => {
+      const itemId = id as ItemId;
+      const owned = state.inventory[itemId] ?? 0;
+      const need = amount ?? 0;
+      lines.push({ label: `${itemEmoji[itemId]} ${itemNames[itemId]} ${owned}/${need}`, ready: owned >= need });
+    });
+    if (order.fishRarityCost && order.fishCount) {
+      const owned = fishList.filter((fishItem) => fishItem.rarity === order.fishRarityCost).reduce((sum, fishItem) => sum + (state.fishCollection[fishItem.id]?.count ?? 0), 0);
+      lines.push({ label: `🐟 ${order.fishRarityCost} 鱼 ${owned}/${order.fishCount}`, ready: owned >= order.fishCount });
+    }
+    if (order.catMoodRequired) lines.push({ label: `猫心情 ${state.cat.mood}/${order.catMoodRequired}`, ready: state.cat.mood >= order.catMoodRequired });
+    if (order.catIntimacyRequired) lines.push({ label: `猫亲密 ${state.cat.intimacy}/${order.catIntimacyRequired}`, ready: state.cat.intimacy >= order.catIntimacyRequired });
+    return lines;
+  };
+
+  const rewardLines = (order: SeaOrder) => [
+    order.rewardCoins ? `+${order.rewardCoins}${state.boatLevel >= 4 ? "+12" : ""} 贝壳币` : "",
+    order.rewardMood ? `Mood +${order.rewardMood}` : "",
+    order.rewardCatIntimacy ? `猫亲密 +${order.rewardCatIntimacy}` : "",
+    ...Object.entries(order.rewardItems ?? {}).map(([id, amount]) => `${itemEmoji[id as ItemId]} ${itemNames[id as ItemId]} x${amount}`),
+  ].filter(Boolean);
+
+  return (
+    <div className="module-stack">
+      <div className="section-heading">
+        <div>
+          <h3>📦 海上订单</h3>
+          <p className="hint">{state.boatLevel >= 4 ? "海上补给站已建成，订单会带来更好的经营收益。" : "每天会刷新 2～3 张订单，提交鱼获、料理或材料换取奖励。"}</p>
+        </div>
+        {state.orders.some((order) => canCompleteOrder(state, order)) && <span className="notice-pill">有订单可完成</span>}
+      </div>
+      <div className="orders-grid">
+        {state.orders.length ? state.orders.map((order) => {
+          const ready = canCompleteOrder(state, order);
+          return (
+            <article className={`order-card order-${order.kind} ${ready ? "ready-order" : ""}`} key={order.id}>
+              <span className="order-kind">{order.kind === "food" ? "🍲" : order.kind === "fish" ? "🐟" : order.kind === "cat" ? "猫" : order.kind === "rescue" ? "🛟" : "🧰"}</span>
+              <div>
+                <h3>{order.title}</h3>
+                <p>{order.story}</p>
+              </div>
+              <div className="order-needs">
+                {orderNeedLines(order).map((line) => <span className={line.ready ? "ready" : "warning"} key={line.label}>{line.label}</span>)}
+              </div>
+              <div className="reward-row">
+                {rewardLines(order).map((reward) => <span key={reward}>{reward}</span>)}
+              </div>
+              <div className="modal-actions">
+                <button onClick={() => onAbandon(order.id)}>放弃</button>
+                <button className="primary-action" disabled={!ready} onClick={() => onComplete(order.id)}>完成订单</button>
+              </div>
+            </article>
+          );
+        }) : <p>今天暂时没有订单，结束一天后会有新的海上委托。</p>}
+      </div>
+    </div>
   );
 }
 

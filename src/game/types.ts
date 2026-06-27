@@ -212,6 +212,25 @@ export interface LogEntry {
   isNew?: boolean;
 }
 
+export type FishingMode = "miniGame" | "quick";
+export type OrderKind = "food" | "material" | "fish" | "cat" | "rescue";
+
+export interface SeaOrder {
+  id: string;
+  kind: OrderKind;
+  title: string;
+  story: string;
+  itemCost?: Partial<Record<ItemId, number>>;
+  fishRarityCost?: FishRarity;
+  fishCount?: number;
+  catMoodRequired?: number;
+  catIntimacyRequired?: number;
+  rewardCoins?: number;
+  rewardItems?: Partial<Record<ItemId, number>>;
+  rewardMood?: number;
+  rewardCatIntimacy?: number;
+}
+
 export type FishPrices = Record<string, number>;
 
 export interface TradePrices {
@@ -242,6 +261,9 @@ export interface GameState {
   cat: CatState;
   fishDexRewardsClaimed: number[];
   firstCookedRecipeIds: string[];
+  fishingMode: FishingMode;
+  orders: SeaOrder[];
+  lastMoodStatus?: string;
   gameOverReason?: string;
   tutorialSeen?: boolean;
   lastCard?: Card;

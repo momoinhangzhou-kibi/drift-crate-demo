@@ -333,9 +333,9 @@ export const initialInventory: Record<ItemId, number> = {
 };
 
 export const foodItems: Food[] = [
-  { id: "biscuit", name: "饼干", emoji: "🍪", hunger: 15, mood: 2, description: "脆脆的小饼干，适合应急。" },
-  { id: "cannedFood", name: "罐头", emoji: "🥫", hunger: 28, mood: 4, description: "扎实可靠的海上口粮。" },
-  { id: "ramen", name: "泡面", emoji: "🍜", hunger: 32, mood: 8, description: "热乎乎的泡面能拯救一天。" },
+  { id: "biscuit", name: "饼干", emoji: "🍪", hunger: 15, mood: 1, description: "脆脆的小饼干，适合应急。" },
+  { id: "cannedFood", name: "罐头", emoji: "🥫", hunger: 28, mood: 2, description: "扎实可靠的海上口粮。" },
+  { id: "ramen", name: "泡面", emoji: "🍜", hunger: 32, mood: 5, description: "热乎乎的泡面能拯救一天。" },
   { id: "chocolate", name: "巧克力", emoji: "🍫", hunger: 12, mood: 12, description: "一点甜味让漂流没那么孤单。" },
   { id: "compressedBiscuit", name: "压缩饼干", emoji: "🥨", hunger: 35, mood: 1, description: "非常顶饱，但谈不上快乐。" },
   { id: "grilledFish", name: "烤鱼", emoji: "🍖", hunger: 25, mood: 3, description: "最基础的漂流食物，简单但可靠。" },
@@ -426,6 +426,9 @@ export function createInitialState(): GameState {
     cat: createCatState("black"),
     fishDexRewardsClaimed: [],
     firstCookedRecipeIds: [],
+    fishingMode: "miniGame",
+    orders: [],
+    lastMoodStatus: "状态很好",
     logs: [
       {
         id: crypto.randomUUID(),
