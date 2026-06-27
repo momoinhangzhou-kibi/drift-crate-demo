@@ -491,6 +491,7 @@ export function createInitialState(): GameState {
     fishDexRewardsClaimed: [],
     firstCookedRecipeIds: [],
     fishingMode: "miniGame",
+    salvageMode: "miniGame",
     orders: [],
     garden: [],
     lastMoodStatus: "状态很好",

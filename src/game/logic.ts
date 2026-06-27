@@ -18,7 +18,7 @@ import {
   upgradeRequirements,
   weatherList,
 } from "./data";
-import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishingCatchRating, FishRarity, GameState, GardenPlot, ItemId, LogType, Rarity, Recipe, SeaOrder, TalentId, TradePrices, Weather } from "./types";
+import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishingCatchRating, FishRarity, GameState, GardenPlot, ItemId, LogType, Rarity, Recipe, SalvageOption, SalvageRisk, SeaOrder, TalentId, TradePrices, Weather } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
 const SAVE_SLOTS_KEY = "drift-crate-save-slots";
@@ -608,6 +608,76 @@ export function salvage(state: GameState): GameState {
     next = addLog(next, "salvage", "防水背包", "防水背包多护住了一件漂流物。", [`${itemNames[extra]} x1`]);
   }
   return addLog(next, "salvage", "打捞", `你从漂流木箱里找到了${itemNames[loot[0]]} x${loot[1]}。`, rewards);
+}
+
+const salvageObjects: SalvageOption[] = [
+  { id: "wood-pile", name: "漂浮木板堆", description: "几块木板被绳子松松绑在一起，很适合入门打捞。", possible: "木板、塑料、绳子、少量种子", risk: "低" },
+  { id: "old-crate", name: "破旧木箱", description: "箱角泡得发白，里面可能还有没湿透的东西。", possible: "木板、饼干、胶带、普通补给包", risk: "低" },
+  { id: "rust-barrel", name: "生锈铁桶", description: "桶身很沉，拖回来可能会刮到木筏。", possible: "铁片、螺丝、修理胶带、工具", risk: "中" },
+  { id: "supply-case", name: "漂流补给箱", description: "看起来比普通漂流物更完整，但绳索需要抓稳。", possible: "普通补给包、工具、种子、家具券", risk: "中" },
+  { id: "seaweed-bag", name: "海藻缠住的袋子", description: "袋子被海草裹住，可能有生活物资，也可能只有海草。", possible: "湿巾、种子、海草、淡水", risk: "中" },
+  { id: "storm-wreck", name: "风暴残骸", description: "从远处漂来的残骸闪着金属光，奖励好但很危险。", possible: "高级补给包、幸运贝壳、稀有材料、家具券", risk: "高" },
+  { id: "far-glimmer", name: "远处闪光物", description: "海面有一点亮光，距离远，可能值得冒险。", possible: "幸运贝壳、高级补给包、稀有种子", risk: "高" },
+];
+
+export function createSalvageOptions(state: GameState): SalvageOption[] {
+  const stormy = ["暴雨", "风暴", "巨浪"].includes(state.weather);
+  const pool = stormy && Math.random() < 0.7
+    ? [salvageObjects.find((item) => item.id === "storm-wreck")!, ...salvageObjects.filter((item) => item.id !== "storm-wreck")]
+    : [...salvageObjects];
+  return pool.sort(() => Math.random() - 0.5).slice(0, 3);
+}
+
+function riskSuccessRate(state: GameState, risk: SalvageRisk) {
+  const base = risk === "低" ? 0.9 : risk === "中" ? 0.68 : 0.48;
+  const moodBonus = state.mood >= 80 ? 0.08 : state.mood < 35 ? -0.1 : 0;
+  const gearBonus = state.equipment.includes("waterproofBackpack") ? 0.04 : 0;
+  return Math.max(0.18, Math.min(0.96, base + moodBonus + gearBonus));
+}
+
+export function salvageWithChoice(state: GameState, optionId: string): GameState {
+  const option = salvageObjects.find((item) => item.id === optionId) ?? salvageObjects[0];
+  if (state.hunger <= 0) return addLog(state, "warning", "体力不足", "你没有力气打捞了，肚子正在抗议。");
+  const success = Math.random() < riskSuccessRate(state, option.risk);
+  const rewards: string[] = [`风险：${option.risk}`];
+
+  if (!success) {
+    if ((state.inventory.luckyShell ?? 0) > 0) {
+      const fallback = pick(["wood", "plastic", "rope"] as ItemId[]);
+      let next = addItem(addItem({ ...state, hunger: clamp(state.hunger - 3) }, "luckyShell", -1), fallback, 1);
+      return addLog(next, "salvage", "幸运贝壳保底", `${option.name}突然下沉，但幸运贝壳亮了一下，你至少捞回了${itemNames[fallback]} x1。`, ["幸运贝壳 x-1", `${itemNames[fallback]} x1`], true);
+    }
+    const rawHpLoss = option.risk === "低" ? 0 : option.risk === "中" ? randomInt(2, 5) : randomInt(5, 10);
+    const hpLoss = state.inventory.toolbox > 0 ? Math.max(0, rawHpLoss - 3) : rawHpLoss;
+    const moodLoss = option.risk === "高" ? 4 : option.risk === "中" ? 2 : 0;
+    return addLog(
+      { ...state, hunger: clamp(state.hunger - 3), boatHp: Math.max(0, state.boatHp - hpLoss), mood: clamp(state.mood - moodLoss) },
+      "warning",
+      "打捞失手",
+      `${option.name}突然下沉，绳子差点被扯断。${hpLoss ? `Boat HP -${hpLoss}。` : "幸好没有伤到木筏。"}`,
+      [...rewards, ...(hpLoss ? [`Boat HP -${hpLoss}`] : []), ...(moodLoss ? [`Mood -${moodLoss}`] : []), ...(state.inventory.toolbox > 0 && rawHpLoss > hpLoss ? ["工具箱减免船体损伤"] : [])],
+      option.risk === "高",
+    );
+  }
+
+  const pools: Record<SalvageRisk, [ItemId, number][]> = {
+    低: [["wood", randomInt(2, 4)], ["plastic", randomInt(2, 4)], ["rope", 1], ["lettuceSeed", 1], ["tomatoSeed", 1]],
+    中: [["scrap", randomInt(1, 2)], ["tape", 1], ["repairTape", 1], ["toolbox", 1], ["commonCrate", 1], ["carrotSeed", 1], ["potatoSeed", 1]],
+    高: [["premiumCrate", 1], ["furnitureTicket", 1], ["luckyShell", 1], ["screw", randomInt(1, 3)], ["pepperSeed", 1], ["solarPurifier", 1]],
+  };
+  const drops = option.risk === "高" ? 2 : option.risk === "中" && state.mood >= 80 ? 2 : 1;
+  let next: GameState = { ...state, hunger: clamp(state.hunger - 4), mood: clamp(state.mood + (option.risk === "高" ? 2 : 1)) };
+  for (let i = 0; i < drops; i += 1) {
+    const [itemId, amount] = pick(pools[option.risk]);
+    next = addItem(next, itemId, amount);
+    rewards.push(`${itemEmoji[itemId]} ${itemNames[itemId]} x${amount}`);
+  }
+  if (state.equipment.includes("waterproofBackpack") && Math.random() < 0.28) {
+    const extra = pick(["wood", "plastic", "rope", "tape"] as ItemId[]);
+    next = addItem(next, extra, 1);
+    rewards.push(`防水背包额外：${itemNames[extra]} x1`);
+  }
+  return addLog(next, "salvage", option.name, `你小心拉回了${option.name}，收获还不错。`, rewards, option.risk === "高");
 }
 
 function rollCardRarity(state: GameState, premium: boolean): Rarity {
@@ -1491,6 +1561,7 @@ function migrateState(raw: Partial<GameState>): GameState {
   const shopStock = raw.shopStock?.length ? raw.shopStock : createShopStock(raw.day ?? 1);
   const cat = migrateCat(raw.cat);
   const fishingMode = raw.fishingMode === "quick" || raw.fishingMode === "miniGame" ? raw.fishingMode : "miniGame";
+  const salvageMode = raw.salvageMode === "quick" || raw.salvageMode === "miniGame" ? raw.salvageMode : "miniGame";
   const orders = Array.isArray(raw.orders) && raw.orders.length ? raw.orders : createDailyOrders(raw.day ?? 1, raw.boatLevel ?? initial.boatLevel);
   const garden = Array.isArray(raw.garden)
     ? raw.garden
@@ -1523,7 +1594,7 @@ function migrateState(raw: Partial<GameState>): GameState {
   const fishDexRewardsClaimed = Array.isArray(raw.fishDexRewardsClaimed) ? raw.fishDexRewardsClaimed : [];
   const firstCookedRecipeIds = Array.isArray(raw.firstCookedRecipeIds) ? raw.firstCookedRecipeIds.filter((id): id is string => typeof id === "string") : [];
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, orders, garden, lastMoodStatus };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, salvageMode, orders, garden, lastMoodStatus };
 }
 
 function readLegacySavedPayload(): { state: GameState; savedAt?: string } | undefined {

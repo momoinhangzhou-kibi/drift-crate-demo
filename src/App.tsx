@@ -8,6 +8,7 @@ import {
   canUpgradeBoat,
   completeOrder,
   cookRecipe,
+  createSalvageOptions,
   decorate,
   deleteSaveSlot,
   endDay,
@@ -45,6 +46,7 @@ import {
   removeFurniture,
   resetGame,
   salvage,
+  salvageWithChoice,
   renameSaveSlot,
   saveGame,
   saveGameAs,
@@ -58,7 +60,7 @@ import {
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
 import type { SaveSlot } from "./game/logic";
-import { CatFeedOption, CatOption, CatState, CatType, Fish, FishingCatchRating, FishingMode, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, SeaOrder, ShopItem, TalentId } from "./game/types";
+import { CatFeedOption, CatOption, CatState, CatType, Fish, FishingCatchRating, FishingMode, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, SalvageMode, SalvageOption, SeaOrder, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
   "wood",
@@ -212,6 +214,7 @@ function App() {
   const [showSelling, setShowSelling] = useState(false);
   const [showCat, setShowCat] = useState(false);
   const [showFishingGame, setShowFishingGame] = useState(false);
+  const [salvageOptions, setSalvageOptions] = useState<SalvageOption[] | undefined>();
   const [activePanel, setActivePanel] = useState<ModulePanel | undefined>();
   const [titlePanel, setTitlePanel] = useState<TitlePanel | undefined>();
   const [selectedItem, setSelectedItem] = useState<ItemId | undefined>();
@@ -678,7 +681,7 @@ function App() {
 
           <section className="actions panel action-dock">
             <ActionButton onClick={() => state.fishingMode === "quick" ? applyAction("钓鱼", fish(state)) : setShowFishingGame(true)}>🎣 钓鱼<small>{state.fishingMode === "quick" ? "快速钓鱼" : "小游戏钓鱼"}</small></ActionButton>
-            <ActionButton onClick={() => applyAction("打捞", salvage(state))}>🪝 打捞</ActionButton>
+            <ActionButton onClick={() => state.salvageMode === "quick" ? applyAction("打捞", salvage(state)) : setSalvageOptions(createSalvageOptions(state))}>🪝 打捞<small>{state.salvageMode === "quick" ? "快速打捞" : "小游戏打捞"}</small></ActionButton>
             <ActionButton badge={state.inventory.commonCrate > 0 ? "可开" : undefined} onClick={() => openCrateAndShow("commonCrate")}>
               🎁 开普通包 x{state.inventory.commonCrate}<small>消耗普通包 x1</small>
             </ActionButton>
@@ -860,6 +863,7 @@ function App() {
             setMusicError(undefined);
           }}
           onFishingModeChange={(mode) => update({ ...state, fishingMode: mode })}
+          onSalvageModeChange={(mode) => update({ ...state, salvageMode: mode })}
           onNextTrack={playNextTrack}
           onSave={saveCurrentGame}
           onSaveAs={saveAsNewSlot}
@@ -961,6 +965,17 @@ function App() {
           onFinish={(result) => {
             setShowFishingGame(false);
             applyAction("钓鱼", fishWithMiniGame(state, result));
+          }}
+        />
+      )}
+      {salvageOptions && (
+        <SalvageMiniGame
+          state={state}
+          options={salvageOptions}
+          onClose={() => setSalvageOptions(undefined)}
+          onPick={(optionId) => {
+            setSalvageOptions(undefined);
+            applyAction("打捞", salvageWithChoice(state, optionId));
           }}
         />
       )}
@@ -1216,6 +1231,7 @@ function GameModulePanel({
   onToggleMusic,
   onMusicModeChange,
   onFishingModeChange,
+  onSalvageModeChange,
   onNextTrack,
   onSave,
   onSaveAs,
@@ -1253,6 +1269,7 @@ function GameModulePanel({
   onToggleMusic: () => void;
   onMusicModeChange: (mode: MusicMode) => void;
   onFishingModeChange: (mode: FishingMode) => void;
+  onSalvageModeChange: (mode: SalvageMode) => void;
   onNextTrack: () => void;
   onSave: () => void;
   onSaveAs: () => void;
@@ -1337,6 +1354,17 @@ function GameModulePanel({
               <select value={state.fishingMode} onChange={(event) => onFishingModeChange(event.target.value as FishingMode)}>
                 <option value="miniGame">小游戏钓鱼</option>
                 <option value="quick">快速钓鱼</option>
+              </select>
+            </div>
+            <div className="music-settings-card">
+              <div>
+                <strong>🪝 打捞模式</strong>
+                <p>当前模式：{state.salvageMode === "miniGame" ? "小游戏打捞" : "快速打捞"}</p>
+                <p>小游戏会让你从 3 个漂浮物中选择，风险越高奖励越好。</p>
+              </div>
+              <select value={state.salvageMode} onChange={(event) => onSalvageModeChange(event.target.value as SalvageMode)}>
+                <option value="miniGame">小游戏打捞</option>
+                <option value="quick">快速打捞</option>
               </select>
             </div>
             <div className="music-settings-card">
@@ -1865,6 +1893,38 @@ function FishingMiniGame({ state, onClose, onFinish }: { state: GameState; onClo
           <button onClick={onClose}>放弃</button>
           <button className="primary-action" onClick={reelIn}>收杆</button>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function SalvageMiniGame({ state, options, onClose, onPick }: { state: GameState; options: SalvageOption[]; onClose: () => void; onPick: (optionId: string) => void }) {
+  const hint = Math.random() < 0.35
+    ? `${state.cat.name} 盯着远处的漂浮物，好像觉得那里有东西。`
+    : "海面漂来几样东西，选一个最有把握的拉回来吧。";
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="wide-modal salvage-mini-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Salvage Mini Game</p>
+            <h2>🪝 选择漂浮物</h2>
+            <p className="hint">{hint}</p>
+          </div>
+          <button className="compact-button" onClick={onClose}>关闭</button>
+        </div>
+        <div className="salvage-options-grid">
+          {options.map((option) => (
+            <article className={`salvage-option risk-${option.risk}`} key={option.id}>
+              <span className="risk-pill">风险 {option.risk}</span>
+              <h3>{option.name}</h3>
+              <p>{option.description}</p>
+              <small>可能获得：{option.possible}</small>
+              <button className={option.risk === "高" ? "primary-action" : ""} onClick={() => onPick(option.id)}>打捞</button>
+            </article>
+          ))}
+        </div>
+        <p className="hint">Mood 高会提高成功率；防水背包可能额外带回材料；工具箱能降低失败时的船体损伤。</p>
       </section>
     </div>
   );

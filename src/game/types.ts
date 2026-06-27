@@ -227,7 +227,17 @@ export interface LogEntry {
 
 export type FishingMode = "miniGame" | "quick";
 export type FishingCatchRating = "perfect" | "good" | "normal" | "weak" | "fail";
+export type SalvageMode = "miniGame" | "quick";
+export type SalvageRisk = "低" | "中" | "高";
 export type OrderKind = "food" | "material" | "fish" | "crop" | "cat" | "rescue";
+
+export interface SalvageOption {
+  id: string;
+  name: string;
+  description: string;
+  possible: string;
+  risk: SalvageRisk;
+}
 
 export interface SeaOrder {
   id: string;
@@ -284,6 +294,7 @@ export interface GameState {
   fishDexRewardsClaimed: number[];
   firstCookedRecipeIds: string[];
   fishingMode: FishingMode;
+  salvageMode: SalvageMode;
   orders: SeaOrder[];
   garden: GardenPlot[];
   lastMoodStatus?: string;

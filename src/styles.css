@@ -1494,6 +1494,57 @@ p {
   color: #557485;
 }
 
+.salvage-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.salvage-option {
+  display: grid;
+  gap: 0.65rem;
+  position: relative;
+  border: 2px solid #d7f3fb;
+  border-radius: 18px;
+  padding: 1rem;
+  background: linear-gradient(180deg, #ffffff, #f2fbff);
+}
+
+.salvage-option.risk-低 {
+  border-color: #7edca6;
+}
+
+.salvage-option.risk-中 {
+  border-color: #ffca42;
+}
+
+.salvage-option.risk-高 {
+  border-color: #ff8a9b;
+  box-shadow: 0 0 0 4px rgba(255, 91, 107, 0.1);
+}
+
+.salvage-option h3,
+.salvage-option p {
+  margin: 0;
+}
+
+.salvage-option p,
+.salvage-option small {
+  color: #557485;
+  line-height: 1.5;
+  font-weight: 800;
+}
+
+.risk-pill {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  background: #fff6d8;
+  color: #7a5a16;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
 .item-detail-modal {
   max-width: 620px;
 }
@@ -2931,6 +2982,7 @@ p {
   .recipe-grid,
   .orders-grid,
   .garden-grid,
+  .salvage-options-grid,
   .food-row,
   .save-slot,
   .save-slot-card,
