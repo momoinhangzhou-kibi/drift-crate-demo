@@ -58,6 +58,17 @@ export type ItemId =
   | "searedTuna"
   | "rainbowSashimi"
   | "survivorFeast"
+  | "tomatoSeed"
+  | "potatoSeed"
+  | "carrotSeed"
+  | "lettuceSeed"
+  | "pepperSeed"
+  | "tomato"
+  | "potato"
+  | "carrot"
+  | "lettuce"
+  | "pepper"
+  | "planterBox"
   | "commonFish"
   | "rareFish"
   | "mysteryFish";
@@ -67,7 +78,7 @@ export type FishRarity = "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary";
 export type Weather = "晴天" | "阴天" | "小雨" | "暴雨" | "大雾" | "风暴" | "高温" | "寒潮" | "巨浪";
 export type BoatLevel = 1 | 2 | 3 | 4;
 export type TalentId = "fishing" | "trading" | "lucky" | "crafting" | "repair" | "cooking" | "catFriend" | "crateHunter" | "decorator";
-export type ItemCategory = "materials" | "food" | "tools" | "hygiene" | "furniture" | "equipment" | "special";
+export type ItemCategory = "materials" | "food" | "seeds" | "crops" | "tools" | "hygiene" | "furniture" | "equipment" | "special";
 export type CatType = "black" | "cow" | "orange" | "calico";
 
 export interface Fish {
@@ -213,7 +224,7 @@ export interface LogEntry {
 }
 
 export type FishingMode = "miniGame" | "quick";
-export type OrderKind = "food" | "material" | "fish" | "cat" | "rescue";
+export type OrderKind = "food" | "material" | "fish" | "crop" | "cat" | "rescue";
 
 export interface SeaOrder {
   id: string;
@@ -229,6 +240,14 @@ export interface SeaOrder {
   rewardItems?: Partial<Record<ItemId, number>>;
   rewardMood?: number;
   rewardCatIntimacy?: number;
+}
+
+export interface GardenPlot {
+  id: string;
+  seedId?: ItemId;
+  cropId?: ItemId;
+  remainingDays: number;
+  totalDays: number;
 }
 
 export type FishPrices = Record<string, number>;
@@ -263,6 +282,7 @@ export interface GameState {
   firstCookedRecipeIds: string[];
   fishingMode: FishingMode;
   orders: SeaOrder[];
+  garden: GardenPlot[];
   lastMoodStatus?: string;
   gameOverReason?: string;
   tutorialSeen?: boolean;

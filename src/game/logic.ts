@@ -18,7 +18,7 @@ import {
   upgradeRequirements,
   weatherList,
 } from "./data";
-import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishRarity, GameState, ItemId, LogType, Rarity, Recipe, SeaOrder, TalentId, TradePrices, Weather } from "./types";
+import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishRarity, GameState, GardenPlot, ItemId, LogType, Rarity, Recipe, SeaOrder, TalentId, TradePrices, Weather } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
 const SAVE_SLOTS_KEY = "drift-crate-save-slots";
@@ -413,16 +413,38 @@ export function createDailyOrders(day: number, boatLevel: BoatLevel = 1): SeaOrd
     { id: `mat-${day}`, kind: "material", title: "修船材料委托", story: "路过的小船需要基础材料。", itemCost: { wood: 4, rope: 1 }, rewardCoins: 32, rewardItems: { commonCrate: 1 } },
     { id: `food-${day}`, kind: "food", title: "热汤外送", story: "隔壁木筏想换一碗热汤。", itemCost: { fishSoup: 1 }, rewardCoins: 45, rewardMood: 2 },
     { id: `fish-${day}`, kind: "fish", title: "今日鱼获收购", story: "商船厨房想收几条普通鱼。", fishRarityCost: "Common", fishCount: 3, rewardCoins: 38 },
+    { id: `crop-${day}`, kind: "crop", title: "漂浮菜园订单", story: "有人想用新鲜蔬菜换一小袋种子。", itemCost: { lettuce: 2, tomato: 1 }, rewardCoins: 34, rewardItems: { carrotSeed: 1 } },
     { id: `cat-${day}`, kind: "cat", title: "猫猫招待员", story: "客人想看看精神饱满的看板猫。", catMoodRequired: 60, catIntimacyRequired: 20, rewardCoins: 30, rewardCatIntimacy: 1 },
     { id: `rescue-${day}`, kind: "rescue", title: "灾害救援补给", story: "远处木筏发来防灾求助。", itemCost: { tarp: 1, water: 1 }, rewardCoins: 60, rewardItems: { repairTape: 1 } },
   ];
   if (advanced) {
     pool.push(
       { id: `hotpot-${day}`, kind: "food", title: "补给站招牌火锅", story: "海上补给站开张，客人点名要热闹一点。", itemCost: { driftHotpot: 1 }, rewardCoins: 120, rewardItems: { premiumCrate: 1 }, rewardMood: 3 },
+      { id: `garden-${day}`, kind: "crop", title: "海上小家蔬菜箱", story: "商船想收一箱能证明你会经营菜园的新鲜作物。", itemCost: { potato: 2, carrot: 2, pepper: 1 }, rewardCoins: 88, rewardItems: { potatoSeed: 1, pepperSeed: 1 } },
       { id: `rarefish-${day}`, kind: "fish", title: "稀有鱼展示订单", story: "收藏商想买一条稀有鱼。", fishRarityCost: "Rare", fishCount: 1, rewardCoins: 95, rewardItems: { furnitureTicket: 1 } },
     );
   }
   return [...pool].sort(() => Math.random() - 0.5).slice(0, advanced ? 3 : 2);
+}
+
+export const seedCatalog: { seedId: ItemId; cropId: ItemId; growDays: number; yield: number; price: number }[] = [
+  { seedId: "lettuceSeed", cropId: "lettuce", growDays: 2, yield: 2, price: 5 },
+  { seedId: "tomatoSeed", cropId: "tomato", growDays: 3, yield: 2, price: 6 },
+  { seedId: "carrotSeed", cropId: "carrot", growDays: 3, yield: 2, price: 7 },
+  { seedId: "potatoSeed", cropId: "potato", growDays: 4, yield: 3, price: 8 },
+  { seedId: "pepperSeed", cropId: "pepper", growDays: 4, yield: 2, price: 9 },
+];
+
+export function getSeedInfo(seedId: ItemId) {
+  return seedCatalog.find((item) => item.seedId === seedId);
+}
+
+export function getCropPrice(cropId: ItemId) {
+  return seedCatalog.find((item) => item.cropId === cropId)?.price ?? 4;
+}
+
+function createGardenPlot(): GardenPlot {
+  return { id: crypto.randomUUID(), remainingDays: 0, totalDays: 0 };
 }
 
 export function startGame(talent: TalentId, catType: CatType = "black"): GameState {
@@ -750,6 +772,47 @@ export function buyShopItem(state: GameState, itemId: ItemId, amount = 1): GameS
   return addLog(next, "trade", "潮汐商店", `买下${itemNames[itemId]} x${safeAmount}，花费 ${total} 贝壳币。`, [`${itemNames[itemId]} x${safeAmount}`]);
 }
 
+export function placePlanterBox(state: GameState): GameState {
+  if ((state.inventory.planterBox ?? 0) <= 0) return addLog(state, "warning", "漂浮菜园", "背包里没有种植箱。");
+  const next = addItem(state, "planterBox", -1);
+  return addLog({ ...next, garden: [...(next.garden ?? []), createGardenPlot()], furniture: next.furniture.includes("种植箱") ? next.furniture : [...next.furniture, "种植箱"] }, "furniture", "漂浮菜园", "你把种植箱固定在木筏边缘，漂浮菜园开张了。", ["种植箱 +1"], true);
+}
+
+export function plantSeed(state: GameState, plotId: string, seedId: ItemId): GameState {
+  const seed = getSeedInfo(seedId);
+  if (!seed) return addLog(state, "warning", "漂浮菜园", "这个种子暂时不能种。");
+  if ((state.inventory[seedId] ?? 0) <= 0) return addLog(state, "warning", "漂浮菜园", `背包里没有${itemNames[seedId]}。`);
+  const plot = state.garden.find((item) => item.id === plotId);
+  if (!plot) return addLog(state, "warning", "漂浮菜园", "这个种植箱不见了。");
+  if (plot.seedId) return addLog(state, "warning", "漂浮菜园", "这个种植箱已经种下东西了。");
+  const next = addItem(state, seedId, -1);
+  return addLog({
+    ...next,
+    garden: next.garden.map((item) => item.id === plotId ? { ...item, seedId, cropId: seed.cropId, remainingDays: seed.growDays, totalDays: seed.growDays } : item),
+  }, "furniture", "漂浮菜园", `你种下了${itemNames[seedId]}。`, [`${itemNames[seedId]} x-1`, `${itemNames[seed.cropId]}：${seed.growDays}天后成熟`]);
+}
+
+export function harvestGardenPlot(state: GameState, plotId: string): GameState {
+  const plot = state.garden.find((item) => item.id === plotId);
+  if (!plot || !plot.cropId || !plot.seedId) return addLog(state, "warning", "漂浮菜园", "这个种植箱还是空的。");
+  if (plot.remainingDays > 0) return addLog(state, "warning", "漂浮菜园", `${itemNames[plot.cropId]}还没成熟，还需要 ${plot.remainingDays} 天。`);
+  const seed = getSeedInfo(plot.seedId);
+  const amount = seed?.yield ?? 2;
+  const next = addItem(state, plot.cropId, amount);
+  return addLog({
+    ...next,
+    garden: next.garden.map((item) => item.id === plotId ? { id: item.id, remainingDays: 0, totalDays: 0 } : item),
+  }, "furniture", "漂浮菜园", `你收获了 ${amount} 个${itemNames[plot.cropId]}，今晚也许可以煮点热汤。`, [`${itemEmoji[plot.cropId]} ${itemNames[plot.cropId]} x${amount}`], true);
+}
+
+export function sellCrop(state: GameState, cropId: ItemId): GameState {
+  const amount = state.inventory[cropId] ?? 0;
+  if (amount <= 0) return addLog(state, "warning", "出售作物", `背包里没有${itemNames[cropId]}。`);
+  const earned = amount * getCropPrice(cropId);
+  const next = addItem(state, cropId, -amount);
+  return addLog({ ...next, coins: next.coins + earned }, "trade", "出售作物", `你卖出${itemNames[cropId]} x${amount}，获得 ${earned} 贝壳币。`, [`+${earned} 贝壳币`]);
+}
+
 export function cookRecipe(state: GameState, recipeId: string): GameState {
   const recipe = getRecipeById(recipeId);
   if (!recipe) return addLog(state, "warning", "未知食谱", "潮湿的菜谱糊成一团，看不清要做什么。");
@@ -935,6 +998,7 @@ function triggerCatEvent(state: GameState, source: "explore" | "daily", stormy =
     { id: "coins", weight: 18 + (cat.type === "calico" ? 8 : 0) + (state.mood >= 80 ? 2 : 0) },
     { id: "ticket", weight: 6 + (cat.type === "calico" ? 8 : 0) + (state.talent === "decorator" ? 4 : 0) },
     { id: "fish", weight: 18 + (cat.type === "cow" ? 4 : 0) + (state.mood >= 80 ? 2 : 0) },
+    { id: "seed", weight: 7 + (cat.type === "calico" ? 4 : 0) + (state.day >= 5 ? 3 : 0) },
     { id: "mood", weight: 16 + (cat.type === "cow" ? 12 : 0) + (state.talent === "catFriend" ? 6 : 0) },
     { id: "mystery", weight: 6 + (cat.type === "black" ? 16 : 0) + (state.talent === "catFriend" ? 3 : 0) },
     { id: "hungry", weight: cat.type === "orange" && cat.satiety < 55 ? 12 : 3 },
@@ -980,6 +1044,11 @@ function triggerCatEvent(state: GameState, source: "explore" | "daily", stormy =
     message = `${cat.name} ${fishResult.eventText}`;
     rewards = [fishResult.reward];
     important = fishResult.important;
+  } else if (selected.id === "seed") {
+    const seed = pick(seedCatalog);
+    next = addItem(next, seed.seedId, 1);
+    message = `${cat.name} 从漂流叶片下面扒拉出${itemNames[seed.seedId]} x1。`;
+    rewards = [`${itemNames[seed.seedId]} x1`];
   } else if (selected.id === "mood") {
     const moodGain = cat.type === "cow" ? 3 : 2;
     next = { ...next, mood: clamp(next.mood + moodGain) };
@@ -1058,6 +1127,7 @@ export function repairBoat(state: GameState): GameState {
 }
 
 export function placeInventoryFurniture(state: GameState, itemId: ItemId): GameState {
+  if (itemId === "planterBox") return placePlanterBox(state);
   const furnitureNames: Partial<Record<ItemId, string>> = {
     foldingChair: "折叠椅",
     shellLamp: "贝壳灯",
@@ -1086,6 +1156,9 @@ export function decorate(state: GameState): GameState {
 
   const furniture = pick(options);
   const next = addItem(state, "furnitureTicket", -1);
+  if (furniture === "种植箱") {
+    return addLog({ ...next, garden: [...(next.garden ?? []), createGardenPlot()], furniture: next.furniture.includes("种植箱") ? next.furniture : [...next.furniture, "种植箱"], mood: clamp(next.mood + 8) }, "furniture", "漂浮菜园", "你布置了一个种植箱，漂浮菜园多了一块小小绿意。", ["种植箱 +1", "Mood +8"], true);
+  }
   return addLog({ ...next, furniture: [...next.furniture, furniture], mood: clamp(next.mood + 10) }, "furniture", "布置家具", `你布置了「${furniture}」，小屋更有生活感了。`, [furniture, "Mood +10"]);
 }
 
@@ -1241,6 +1314,20 @@ function applyDisaster(state: GameState, weather: Weather): GameState {
   );
 }
 
+function advanceGarden(state: GameState): GameState {
+  let matured: string[] = [];
+  const garden = (state.garden ?? []).map((plot) => {
+    if (!plot.cropId || plot.remainingDays <= 0) return plot;
+    const remainingDays = Math.max(0, plot.remainingDays - 1);
+    if (remainingDays === 0) matured.push(itemNames[plot.cropId]);
+    return { ...plot, remainingDays };
+  });
+  const next = { ...state, garden };
+  if (!matured.length) return next;
+  matured = [...new Set(matured)];
+  return addLog(next, "furniture", "漂浮菜园", `漂浮菜园里的${matured.join("、")}成熟了。`, matured.map((name) => `${name}可收获`), true);
+}
+
 export function endDay(state: GameState): GameState {
   if (state.gameOverReason) return state;
   const beforeMoodStatus = getMoodStatus(state.mood);
@@ -1268,6 +1355,7 @@ export function endDay(state: GameState): GameState {
   };
 
   if (state.day % 7 === 0) next = addLog(next, "trade", "潮汐商店", "潮汐商店刷新了新的库存。");
+  next = advanceGarden(next);
   if (dailyFurnitureMood > 0) next = addLog(next, "furniture", "家具效果", `舒适家具让海上小家更安心，Mood +${dailyFurnitureMood}。`, [`Mood +${dailyFurnitureMood}`]);
 
   if (next.equipment.includes("waterPurifier") || next.equipment.includes("solarPurifier")) {
@@ -1355,6 +1443,17 @@ function migrateState(raw: Partial<GameState>): GameState {
   const cat = migrateCat(raw.cat);
   const fishingMode = raw.fishingMode === "quick" || raw.fishingMode === "miniGame" ? raw.fishingMode : "miniGame";
   const orders = Array.isArray(raw.orders) && raw.orders.length ? raw.orders : createDailyOrders(raw.day ?? 1, raw.boatLevel ?? initial.boatLevel);
+  const garden = Array.isArray(raw.garden)
+    ? raw.garden
+        .filter((plot) => typeof plot === "object" && plot)
+        .map((plot: any) => ({
+          id: typeof plot.id === "string" ? plot.id : crypto.randomUUID(),
+          seedId: typeof plot.seedId === "string" ? plot.seedId as ItemId : undefined,
+          cropId: typeof plot.cropId === "string" ? plot.cropId as ItemId : undefined,
+          remainingDays: Math.max(0, Number(plot.remainingDays ?? 0)),
+          totalDays: Math.max(0, Number(plot.totalDays ?? 0)),
+        }))
+    : [];
   const lastMoodStatus = typeof raw.lastMoodStatus === "string" ? raw.lastMoodStatus : getMoodStatus(raw.mood ?? initial.mood);
   const logs = Array.isArray(raw.logs)
     ? raw.logs
@@ -1375,7 +1474,7 @@ function migrateState(raw: Partial<GameState>): GameState {
   const fishDexRewardsClaimed = Array.isArray(raw.fishDexRewardsClaimed) ? raw.fishDexRewardsClaimed : [];
   const firstCookedRecipeIds = Array.isArray(raw.firstCookedRecipeIds) ? raw.firstCookedRecipeIds.filter((id): id is string => typeof id === "string") : [];
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, orders, lastMoodStatus };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, orders, garden, lastMoodStatus };
 }
 
 function readLegacySavedPayload(): { state: GameState; savedAt?: string } | undefined {

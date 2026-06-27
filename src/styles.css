@@ -1398,6 +1398,74 @@ p {
   font-weight: 900;
 }
 
+.garden-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.garden-plot {
+  display: grid;
+  gap: 0.65rem;
+  position: relative;
+  border: 2px solid #d7f3fb;
+  border-radius: 18px;
+  padding: 1rem;
+  background: linear-gradient(180deg, #ffffff, #f1fff5);
+}
+
+.garden-plot.ready-plot {
+  border-color: #7edca6;
+  box-shadow: 0 0 0 4px rgba(126, 220, 166, 0.18);
+}
+
+.garden-plot.growing-plot {
+  border-color: #bdebf5;
+}
+
+.garden-plot h3,
+.garden-plot p {
+  margin: 0;
+}
+
+.garden-plot-icon {
+  position: absolute;
+  right: 0.9rem;
+  top: 0.85rem;
+  font-size: 1.8rem;
+}
+
+.garden-progress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d7f3fb;
+}
+
+.garden-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7edca6, #ffca42);
+}
+
+.seed-buttons,
+.crop-sell-box {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.seed-buttons button,
+.crop-sell-box button {
+  text-align: left;
+  box-shadow: 0 5px 0 #9bd6e4;
+}
+
+.seed-buttons small {
+  display: block;
+  color: #557485;
+}
+
 .item-detail-modal {
   max-width: 620px;
 }
@@ -2834,6 +2902,7 @@ p {
   .inventory-grid,
   .recipe-grid,
   .orders-grid,
+  .garden-grid,
   .food-row,
   .save-slot,
   .save-slot-card,

@@ -19,6 +19,7 @@ import {
   fish,
   fishWithMiniGame,
   getCatFeedOptions,
+  getCropPrice,
   getRecipeStatus,
   getRepairPreview,
   getMissingRequirements,
@@ -34,7 +35,10 @@ import {
   loadGameWithLog,
   noteNoFood,
   openCrate,
+  harvestGardenPlot,
   petCat,
+  plantSeed,
+  placePlanterBox,
   placeInventoryFurniture,
   playWithCat,
   repairBoat,
@@ -46,6 +50,8 @@ import {
   saveGameAs,
   saveGameWithLog,
   sellSelectedFish,
+  sellCrop,
+  seedCatalog,
   startGame,
   upgradeBoat,
   useUtilityItem,
@@ -69,10 +75,10 @@ const materialOrder: ItemId[] = [
 ];
 
 const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "grilledFishSkewer", "seafoodSkewer", "shrimpRiceBall", "seafoodSoup", "cannedRamen", "warmFishSoup", "searedTuna", "rainbowSashimi", "driftHotpot", "deluxeSeafoodPot", "survivorFeast"];
-const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
+const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", seeds: "种子", crops: "作物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
 
 type ViewState = "title" | "talentSelect" | "catSelect" | "playing" | "loadMenu";
-type ModulePanel = "inventory" | "shop" | "orders" | "dex" | "recipes" | "journal" | "cat" | "home" | "guide" | "settings";
+type ModulePanel = "inventory" | "shop" | "orders" | "garden" | "dex" | "recipes" | "journal" | "cat" | "home" | "guide" | "settings";
 type TitlePanel = "dex" | "settings";
 type FeedbackRarity = Rarity | FishRarity | "Uncommon";
 type FeedbackLine = {
@@ -239,6 +245,7 @@ function App() {
   const readyToDecorate = state.inventory.furnitureTicket > 0;
   const readyToSell = hasFishToSell(state);
   const readyToDeliverOrder = state.orders.some((order) => canCompleteOrder(state, order));
+  const readyToHarvest = state.garden.some((plot) => plot.cropId && plot.remainingDays <= 0);
   const discoveredCount = fishList.filter((fishItem) => state.fishCollection[fishItem.id]?.discovered).length;
   const completion = Math.round((discoveredCount / fishList.length) * 100);
   const survival = getSurvivalInfo(state);
@@ -690,6 +697,7 @@ function App() {
             </ActionButton>
             <ActionButton onClick={() => setActivePanel("shop")}>🛒 商店</ActionButton>
             <ActionButton badge={readyToDeliverOrder ? "可交付" : undefined} onClick={() => setActivePanel("orders")}>📦 订单</ActionButton>
+            <ActionButton badge={readyToHarvest ? "可收获" : undefined} onClick={() => setActivePanel("garden")}>🪴 菜园</ActionButton>
             <ActionButton onClick={() => setActivePanel("cat")}>猫 猫猫</ActionButton>
             <ActionButton badge={readyToDecorate ? "可布置" : undefined} onClick={() => applyAction("布置家具", decorate(state))}>
               🪑 布置家具
@@ -829,6 +837,10 @@ function App() {
           onSellFish={openSellPanel}
           onCompleteOrder={(orderId) => applyAction("完成订单", completeOrder(state, orderId))}
           onAbandonOrder={(orderId) => applyAction("放弃订单", abandonOrder(state, orderId))}
+          onPlantSeed={(plotId, seedId) => applyAction("种植", plantSeed(state, plotId, seedId))}
+          onHarvestPlot={(plotId) => applyAction("收获", harvestGardenPlot(state, plotId))}
+          onPlacePlanter={() => applyAction("布置种植箱", placePlanterBox(state))}
+          onSellCrop={(cropId) => applyAction("出售作物", sellCrop(state, cropId))}
           onCook={(recipeId) => applyAction("制作料理", cookRecipe(state, recipeId))}
           onFeedCat={(optionId) => applyAction("喂猫", feedCat(state, optionId))}
           onPetCat={() => applyAction("抚摸猫猫", petCat(state))}
@@ -917,6 +929,7 @@ function App() {
           }}
           onUse={(itemId) => applyAction("使用物品", useUtilityItem(state, itemId))}
           onDecorate={(itemId) => applyAction("布置家具", itemId === "furnitureTicket" ? decorate(state) : placeInventoryFurniture(state, itemId))}
+          onSellCrop={(itemId) => applyAction("出售作物", sellCrop(state, itemId))}
         />
       )}
       {selectedFurniture && (
@@ -1149,6 +1162,7 @@ const moduleItems: { id: ModulePanel; icon: string; label: string }[] = [
   { id: "inventory", icon: "箱", label: "背包" },
   { id: "shop", icon: "店", label: "商店" },
   { id: "orders", icon: "单", label: "订单" },
+  { id: "garden", icon: "芽", label: "菜园" },
   { id: "dex", icon: "鱼", label: "图鉴" },
   { id: "recipes", icon: "锅", label: "菜谱" },
   { id: "journal", icon: "日", label: "日记" },
@@ -1184,6 +1198,10 @@ function GameModulePanel({
   onSellFish,
   onCompleteOrder,
   onAbandonOrder,
+  onPlantSeed,
+  onHarvestPlot,
+  onPlacePlanter,
+  onSellCrop,
   onCook,
   onFeedCat,
   onPetCat,
@@ -1217,6 +1235,10 @@ function GameModulePanel({
   onSellFish: (fishId?: string) => void;
   onCompleteOrder: (orderId: string) => void;
   onAbandonOrder: (orderId: string) => void;
+  onPlantSeed: (plotId: string, seedId: ItemId) => void;
+  onHarvestPlot: (plotId: string) => void;
+  onPlacePlanter: () => void;
+  onSellCrop: (cropId: ItemId) => void;
   onCook: (recipeId: string) => void;
   onFeedCat: (optionId: string) => void;
   onPetCat: () => void;
@@ -1267,6 +1289,8 @@ function GameModulePanel({
         )}
 
         {panel === "orders" && <OrdersPanel state={state} onComplete={onCompleteOrder} onAbandon={onAbandonOrder} />}
+
+        {panel === "garden" && <GardenPanel state={state} onPlant={onPlantSeed} onHarvest={onHarvestPlot} onPlacePlanter={onPlacePlanter} onSellCrop={onSellCrop} />}
 
         {panel === "dex" && (
           <>
@@ -1872,7 +1896,7 @@ function OrdersPanel({ state, onComplete, onAbandon }: { state: GameState; onCom
           const ready = canCompleteOrder(state, order);
           return (
             <article className={`order-card order-${order.kind} ${ready ? "ready-order" : ""}`} key={order.id}>
-              <span className="order-kind">{order.kind === "food" ? "🍲" : order.kind === "fish" ? "🐟" : order.kind === "cat" ? "猫" : order.kind === "rescue" ? "🛟" : "🧰"}</span>
+              <span className="order-kind">{order.kind === "food" ? "🍲" : order.kind === "fish" ? "🐟" : order.kind === "crop" ? "🥬" : order.kind === "cat" ? "猫" : order.kind === "rescue" ? "🛟" : "🧰"}</span>
               <div>
                 <h3>{order.title}</h3>
                 <p>{order.story}</p>
@@ -1890,6 +1914,63 @@ function OrdersPanel({ state, onComplete, onAbandon }: { state: GameState; onCom
             </article>
           );
         }) : <p>今天暂时没有订单，结束一天后会有新的海上委托。</p>}
+      </div>
+    </div>
+  );
+}
+
+function GardenPanel({ state, onPlant, onHarvest, onPlacePlanter, onSellCrop }: { state: GameState; onPlant: (plotId: string, seedId: ItemId) => void; onHarvest: (plotId: string) => void; onPlacePlanter: () => void; onSellCrop: (cropId: ItemId) => void }) {
+  const ownedSeeds = seedCatalog.filter((seed) => (state.inventory[seed.seedId] ?? 0) > 0);
+  const ownedCrops = seedCatalog.filter((seed) => (state.inventory[seed.cropId] ?? 0) > 0);
+  return (
+    <div className="module-stack">
+      <div className="section-heading">
+        <div>
+          <h3>🪴 漂浮菜园</h3>
+          <p className="hint">一个种植箱一次种一种作物。结束一天后成长，成熟后可以收获进背包。</p>
+        </div>
+        <span className="notice-pill">种植箱 x{state.garden.length}</span>
+      </div>
+      <button className="primary-action" disabled={(state.inventory.planterBox ?? 0) <= 0} onClick={onPlacePlanter}>布置种植箱 x{state.inventory.planterBox ?? 0}</button>
+      {!state.garden.length && <p className="hint">还没有种植箱。可以从潮汐商店或补给包里获得。</p>}
+      <div className="garden-grid">
+        {state.garden.map((plot, index) => {
+          const seed = plot.seedId ? seedCatalog.find((item) => item.seedId === plot.seedId) : undefined;
+          const ready = !!plot.cropId && plot.remainingDays <= 0;
+          return (
+            <article className={`garden-plot ${ready ? "ready-plot" : plot.cropId ? "growing-plot" : ""}`} key={plot.id}>
+              <span className="garden-plot-icon">{plot.cropId ? itemEmoji[plot.cropId] : "🪴"}</span>
+              <h3>种植箱 {index + 1}</h3>
+              {plot.cropId ? (
+                <>
+                  <p>{itemNames[plot.cropId]} · {ready ? "成熟可收获" : `还需 ${plot.remainingDays} 天`}</p>
+                  <div className="garden-progress"><span style={{ width: `${plot.totalDays ? ((plot.totalDays - plot.remainingDays) / plot.totalDays) * 100 : 0}%` }} /></div>
+                  <button className={ready ? "primary-action" : ""} disabled={!ready} onClick={() => onHarvest(plot.id)}>收获</button>
+                </>
+              ) : (
+                <>
+                  <p>空闲，可以种下一包种子。</p>
+                  <div className="seed-buttons">
+                    {ownedSeeds.length ? ownedSeeds.map((item) => (
+                      <button key={item.seedId} onClick={() => onPlant(plot.id, item.seedId)}>
+                        {itemEmoji[item.seedId]} {itemNames[item.seedId]} x{state.inventory[item.seedId]}<small>{item.growDays}天 · 收获x{item.yield}</small>
+                      </button>
+                    )) : <span className="warning">没有种子，可以开补给包或去商店看看。</span>}
+                  </div>
+                </>
+              )}
+              {seed && <small className="hint">由 {itemNames[seed.seedId]} 种下</small>}
+            </article>
+          );
+        })}
+      </div>
+      <div className="crop-sell-box">
+        <h3>作物库存</h3>
+        {ownedCrops.length ? ownedCrops.map((item) => (
+          <button key={item.cropId} onClick={() => onSellCrop(item.cropId)}>
+            {itemEmoji[item.cropId]} {itemNames[item.cropId]} x{state.inventory[item.cropId]} · 售价 {getCropPrice(item.cropId)} 🐚/个
+          </button>
+        )) : <p className="hint">还没有收获作物。</p>}
       </div>
     </div>
   );
@@ -1969,7 +2050,8 @@ function InventoryPanel({ state, filter, onFilter, onItemSelect }: { state: Game
         {items.length ? items.map((itemId) => (
           <button className={`item has-item rarity-border-${itemMeta[itemId].rarity.toLowerCase()}`} key={itemId} onClick={() => onItemSelect(itemId)}>
             {(itemId === "commonCrate" || itemId === "premiumCrate") && <span className="item-badge">可开</span>}
-            {itemMeta[itemId].category === "food" && <span className="item-badge">可吃</span>}
+            {(itemMeta[itemId].category === "food" || itemMeta[itemId].category === "crops") && <span className="item-badge">可吃</span>}
+            {itemMeta[itemId].category === "seeds" && <span className="item-badge">可种</span>}
             {itemMeta[itemId].category === "furniture" && <span className="item-badge">可布置</span>}
             {itemMeta[itemId].category === "equipment" && <span className="item-badge">可装备</span>}
             <span>{itemEmoji[itemId]}</span>
@@ -2006,6 +2088,12 @@ const itemDetailText: Partial<Record<ItemId, { description: string; use: string;
   toothbrush: { description: "认真刷牙，是漂流生活的仪式感。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
   toothpaste: { description: "一点清新的味道。", use: "在背包详情中直接使用。", effect: "Mood +2。" },
   medkit: { description: "简单处理疲惫和擦伤的药包。", use: "Hunger 或 Mood 偏低时可使用。", effect: "Hunger +15，Mood +8。" },
+  planterBox: { description: "绑在木筏边缘的小种植箱。", use: "布置后会增加一个漂浮菜园种植位。", effect: "可以种下种子，数天后收获作物。" },
+  tomatoSeed: { description: "适合海风环境的小番茄种子。", use: "在漂浮菜园的空种植箱里种下。", effect: "3 天后收获番茄 x2。" },
+  potatoSeed: { description: "扎实耐放的土豆种子。", use: "在漂浮菜园的空种植箱里种下。", effect: "4 天后收获土豆 x3。" },
+  carrotSeed: { description: "甜脆胡萝卜的种子。", use: "在漂浮菜园的空种植箱里种下。", effect: "3 天后收获胡萝卜 x2。" },
+  lettuceSeed: { description: "最容易上手的清爽生菜种子。", use: "在漂浮菜园的空种植箱里种下。", effect: "2 天后收获生菜 x2。" },
+  pepperSeed: { description: "能给料理增加暖辣味的辣椒种子。", use: "在漂浮菜园的空种植箱里种下。", effect: "4 天后收获辣椒 x2。" },
 };
 
 function getItemDetail(itemId: ItemId) {
@@ -2027,6 +2115,7 @@ function ItemDetailModal({
   onOpenCrate,
   onUse,
   onDecorate,
+  onSellCrop,
 }: {
   state: GameState;
   itemId: ItemId;
@@ -2036,6 +2125,7 @@ function ItemDetailModal({
   onOpenCrate: (crate: "commonCrate" | "premiumCrate") => void;
   onUse: (itemId: ItemId) => void;
   onDecorate: (itemId: ItemId) => void;
+  onSellCrop: (itemId: ItemId) => void;
 }) {
   const detail = getItemDetail(itemId);
   const category = itemMeta[itemId].category;
@@ -2044,7 +2134,8 @@ function ItemDetailModal({
   const catOption = getCatFeedOptions(state).find((option) => option.itemId === itemId);
   const crate = itemId === "commonCrate" || itemId === "premiumCrate" ? itemId : undefined;
   const usableItemIds: ItemId[] = ["wetWipes", "soap", "toothbrush", "toothpaste", "medkit"];
-  const furnitureIds: ItemId[] = ["furnitureTicket", "foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox"];
+  const furnitureIds: ItemId[] = ["furnitureTicket", "foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox", "planterBox"];
+  const cropIds = seedCatalog.map((item) => item.cropId);
   const equipmentActive = state.equipment.includes(itemId) || (itemId === "advancedRodItem" && state.equipment.includes("advancedRod"));
 
   const runAndClose = (action: () => void) => {
@@ -2078,8 +2169,10 @@ function ItemDetailModal({
           {crate && <button className="primary-action" onClick={() => runAndClose(() => onOpenCrate(crate))}>打开礼包</button>}
           {usableItemIds.includes(itemId) && <button className="primary-action" onClick={() => runAndClose(() => onUse(itemId))}>使用</button>}
           {furnitureIds.includes(itemId) && <button onClick={() => runAndClose(() => onDecorate(itemId))}>布置</button>}
+          {cropIds.includes(itemId) && <button onClick={() => runAndClose(() => onSellCrop(itemId))}>出售全部</button>}
           {category === "equipment" && <button disabled>{equipmentActive ? "已装备" : "查看效果"}</button>}
           {category === "materials" && <button disabled>材料会在制作/升级时使用</button>}
+          {category === "seeds" && <button disabled>请到漂浮菜园选择空种植箱种下</button>}
         </div>
       </section>
     </div>
@@ -2097,6 +2190,7 @@ const furnitureDetails: Record<string, { emoji: string; description: string; eff
   "折叠椅": { emoji: "🪑", description: "收放方便的椅子，适合坐着看海。", effect: "提升生活感，布置时 Mood 提升。" },
   "简易马桶": { emoji: "🚽", description: "朴素但重要的生活设施。", effect: "提升小屋生活质量。" },
   "收纳箱": { emoji: "📦", description: "把补给收好，心里也会安稳一点。", effect: "提升仓储感，后续可扩展背包容量效果。" },
+  "种植箱": { emoji: "🪴", description: "固定在木筏边缘的漂浮菜园箱，里面有一点点陆地的味道。", effect: "提供种植位，可种下种子并在数天后收获作物。" },
 };
 
 function getFurnitureDetail(furniture: string) {

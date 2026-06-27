@@ -60,6 +60,17 @@ export const itemNames: Record<ItemId, string> = {
   searedTuna: "香煎金枪鱼",
   rainbowSashimi: "彩虹鱼刺身",
   survivorFeast: "漂流者豪华套餐",
+  tomatoSeed: "番茄种子",
+  potatoSeed: "土豆种子",
+  carrotSeed: "胡萝卜种子",
+  lettuceSeed: "生菜种子",
+  pepperSeed: "辣椒种子",
+  tomato: "番茄",
+  potato: "土豆",
+  carrot: "胡萝卜",
+  lettuce: "生菜",
+  pepper: "辣椒",
+  planterBox: "种植箱",
   commonFish: "普通鱼",
   rareFish: "稀有鱼",
   mysteryFish: "神秘鱼",
@@ -125,6 +136,17 @@ export const itemEmoji: Record<ItemId, string> = {
   searedTuna: "🥩",
   rainbowSashimi: "🍣",
   survivorFeast: "🍱",
+  tomatoSeed: "🌱",
+  potatoSeed: "🌱",
+  carrotSeed: "🌱",
+  lettuceSeed: "🌱",
+  pepperSeed: "🌱",
+  tomato: "🍅",
+  potato: "🥔",
+  carrot: "🥕",
+  lettuce: "🥬",
+  pepper: "🌶️",
+  planterBox: "🪴",
   commonFish: "🐟",
   rareFish: "🐠",
   mysteryFish: "✨",
@@ -135,18 +157,20 @@ export const disasterWeather: Weather[] = ["风暴", "高温", "寒潮", "暴雨
 
 export const itemMeta: Record<ItemId, ItemMeta> = Object.fromEntries(
   (Object.keys(itemNames) as ItemId[]).map((id) => {
+    const seed = ["tomatoSeed", "potatoSeed", "carrotSeed", "lettuceSeed", "pepperSeed"].includes(id);
+    const crop = ["tomato", "potato", "carrot", "lettuce", "pepper"].includes(id);
     const food = ["water", "biscuit", "cannedFood", "ramen", "chocolate", "compressedBiscuit", "grilledFish", "fishSoup", "seafoodSkewer", "driftHotpot", "deluxeSeafoodPot", "grilledFishSkewer", "seafoodSoup", "shrimpRiceBall", "cannedRamen", "warmFishSoup", "searedTuna", "rainbowSashimi", "survivorFeast"].includes(id);
     const tools = ["wrench", "lighter", "flashlight", "toolbox", "repairTape"].includes(id);
     const hygiene = ["toiletPaper", "wetWipes", "sanitaryPad", "towel", "soap", "toothbrush", "toothpaste", "medkit"].includes(id);
-    const furniture = ["foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox", "furnitureTicket"].includes(id);
+    const furniture = ["foldingChair", "shellLamp", "waterproofMattress", "simpleToilet", "storageBox", "furnitureTicket", "planterBox"].includes(id);
     const equipment = ["sturdyRod", "advancedRodItem", "fishingNet", "waterproofBackpack", "solarPurifier", "autoFisher"].includes(id);
     const special = ["commonCrate", "premiumCrate", "mysteryBottle", "luckyShell", "merchantCoupon"].includes(id);
     const rarity = ["premiumCrate", "toolbox", "advancedRodItem", "solarPurifier", "shellLamp", "simpleToilet", "luckyShell", "autoFisher"].includes(id)
       ? "Epic"
-      : ["scrap", "screw", "tarp", "cannedFood", "ramen", "medkit", "sturdyRod", "fishingNet", "mysteryBottle"].includes(id)
+      : ["scrap", "screw", "tarp", "cannedFood", "ramen", "medkit", "sturdyRod", "fishingNet", "mysteryBottle", "planterBox", "pepperSeed"].includes(id)
         ? "Rare"
         : "Common";
-    return [id, { id, category: food ? "food" : tools ? "tools" : hygiene ? "hygiene" : furniture ? "furniture" : equipment ? "equipment" : special ? "special" : "materials", rarity }];
+    return [id, { id, category: seed ? "seeds" : crop ? "crops" : food ? "food" : tools ? "tools" : hygiene ? "hygiene" : furniture ? "furniture" : equipment ? "equipment" : special ? "special" : "materials", rarity }];
   }),
 ) as Record<ItemId, ItemMeta>;
 
@@ -157,6 +181,7 @@ export const shopCatalog: ShopItem[] = [
   ["toiletPaper", 8, 2], ["wetWipes", 12, 2], ["sanitaryPad", 12, 2], ["towel", 16, 1], ["soap", 10, 2], ["toothbrush", 9, 2], ["toothpaste", 11, 2], ["medkit", 40, 1],
   ["sturdyRod", 70, 1], ["advancedRodItem", 160, 1], ["fishingNet", 90, 1], ["waterproofBackpack", 100, 1], ["solarPurifier", 180, 1], ["autoFisher", 220, 1],
   ["foldingChair", 45, 1], ["shellLamp", 85, 1], ["waterproofMattress", 80, 1], ["simpleToilet", 100, 1], ["storageBox", 70, 1],
+  ["planterBox", 75, 1], ["lettuceSeed", 8, 3], ["tomatoSeed", 10, 3], ["carrotSeed", 10, 3], ["potatoSeed", 12, 3], ["pepperSeed", 16, 2],
   ["commonCrate", 30, 3], ["premiumCrate", 100, 1], ["mysteryBottle", 45, 1], ["luckyShell", 120, 1], ["merchantCoupon", 60, 1],
 ].map(([id, price, quantity]) => ({ id: id as ItemId, price: price as number, quantity: quantity as number, category: itemMeta[id as ItemId].category, rarity: itemMeta[id as ItemId].rarity }));
 
@@ -327,6 +352,17 @@ export const initialInventory: Record<ItemId, number> = {
   searedTuna: 0,
   rainbowSashimi: 0,
   survivorFeast: 0,
+  tomatoSeed: 0,
+  potatoSeed: 0,
+  carrotSeed: 0,
+  lettuceSeed: 0,
+  pepperSeed: 0,
+  tomato: 0,
+  potato: 0,
+  carrot: 0,
+  lettuce: 0,
+  pepper: 0,
+  planterBox: 0,
   commonFish: 0,
   rareFish: 0,
   mysteryFish: 0,
@@ -351,6 +387,11 @@ export const foodItems: Food[] = [
   { id: "searedTuna", name: "香煎金枪鱼", emoji: "🥩", hunger: 48, mood: 18, description: "Rare 金枪鱼煎到两面金黄，像海上餐厅的招牌菜。" },
   { id: "rainbowSashimi", name: "彩虹鱼刺身", emoji: "🍣", hunger: 36, mood: 28, description: "颜色漂亮到舍不得吃，心情会被瞬间点亮。" },
   { id: "survivorFeast", name: "漂流者豪华套餐", emoji: "🍱", hunger: 65, mood: 35, description: "鱼、热汤和甜味补给都摆上桌，今天像节日。" },
+  { id: "tomato", name: "番茄", emoji: "🍅", hunger: 8, mood: 1, description: "漂浮菜园里长出的酸甜番茄，咬开像一小口晴天。" },
+  { id: "potato", name: "土豆", emoji: "🥔", hunger: 14, mood: 1, description: "扎实耐放的土豆，漂流者看见它就会安心。" },
+  { id: "carrot", name: "胡萝卜", emoji: "🥕", hunger: 10, mood: 2, description: "脆脆甜甜，给海上生活一点陆地味道。" },
+  { id: "lettuce", name: "生菜", emoji: "🥬", hunger: 7, mood: 2, description: "清爽的生菜叶，适合夹在热乎料理旁边。" },
+  { id: "pepper", name: "辣椒", emoji: "🌶️", hunger: 6, mood: 3, description: "小小一颗就能让料理有精神。" },
 ];
 
 export const recipes: Recipe[] = [
@@ -360,12 +401,16 @@ export const recipes: Recipe[] = [
   { id: "seafood-skewer", name: "海鲜串", emoji: "🍢", description: "把今天的收获串起来烤，意外地很香。", output: "seafoodSkewer", fixedCost: { wood: 1 }, fishCount: 2, rarity: "Uncommon" },
   { id: "shrimp-rice-ball", name: "小虾饭团", emoji: "🍙", description: "透明小虾做成的小饭团，轻巧又治愈。", output: "shrimpRiceBall", fixedCost: { biscuit: 1 }, fishCount: 1, fishIds: ["clear-shrimp"], rarity: "Uncommon", catFavorite: true },
   { id: "seafood-soup", name: "海鲜汤", emoji: "🥣", description: "虾蟹小鱼一起煮，像把海风熬进锅里。", output: "seafoodSoup", fixedCost: { water: 1, veggiePack: 1 }, fishCount: 2, rarity: "Rare", unlockDay: 3, unlockHint: "Day 3 解锁" },
+  { id: "garden-fish-soup", name: "菜园鱼汤", emoji: "🥣", description: "鱼汤里加一点自种蔬菜，海上小家的味道更完整。", output: "seafoodSoup", fixedCost: { water: 1, tomato: 1, lettuce: 1 }, fishCount: 1, rarity: "Rare", unlockDay: 4, unlockHint: "Day 4 解锁" },
   { id: "canned-ramen", name: "罐头泡面", emoji: "🍜", description: "补给包料理的灵魂：罐头、泡面、热水。", output: "cannedRamen", fixedCost: { cannedFood: 1, ramen: 1, water: 1 }, rarity: "Rare", unlockDay: 4, unlockHint: "Day 4 解锁" },
+  { id: "potato-ramen", name: "土豆泡面", emoji: "🍜", description: "土豆让泡面更顶饱，适合风浪后的夜晚。", output: "cannedRamen", fixedCost: { ramen: 1, potato: 1, water: 1 }, rarity: "Rare", unlockDay: 5, unlockHint: "Day 5 解锁" },
   { id: "warm-fish-soup", name: "暖暖鱼汤", emoji: "♨️", description: "多花一点淡水慢慢煮，寒潮前最安心。", output: "warmFishSoup", fixedCost: { water: 2 }, fishCount: 1, rarity: "Rare", unlockDay: 5, unlockHint: "Day 5 解锁", catFavorite: true },
   { id: "seared-tuna", name: "香煎金枪鱼", emoji: "🥩", description: "只用海风金枪鱼做的招牌硬菜。", output: "searedTuna", fixedCost: { wood: 1, tape: 1 }, fishCount: 1, fishIds: ["tuna-bluefin"], rarity: "Epic", unlockDay: 6, unlockHint: "需要钓到海风金枪鱼" },
   { id: "rainbow-sashimi", name: "彩虹鱼刺身", emoji: "🍣", description: "用彩虹鱼做出的漂亮刺身，像在吃一片晴天。", output: "rainbowSashimi", fixedCost: { water: 1 }, fishCount: 1, fishIds: ["rainbow-coral"], rarity: "Epic", unlockDay: 6, unlockHint: "需要钓到彩虹鱼" },
   { id: "drift-hotpot", name: "海上火锅", emoji: "🍲", description: "在海上煮火锅，这就是漂流生活的最高奢侈。", output: "driftHotpot", fixedCost: { hotpotBase: 1, veggiePack: 1, meatSlices: 1, water: 1 }, rarity: "Epic", unlockDay: 7, unlockHint: "Day 7 解锁" },
+  { id: "spicy-drift-hotpot", name: "辣味海上火锅", emoji: "🍲", description: "加了自种辣椒的火锅，寒潮前吃一锅最安心。", output: "driftHotpot", fixedCost: { hotpotBase: 1, meatSlices: 1, pepper: 1, water: 1 }, rarity: "Epic", unlockDay: 8, unlockHint: "Day 8 解锁" },
   { id: "deluxe-seafood-pot", name: "豪华海鲜锅", emoji: "🥘", description: "高级鱼做出来的海鲜锅，心情大幅提升。", output: "deluxeSeafoodPot", fixedCost: { veggiePack: 1, water: 1 }, fishCount: 1, rareFishOnly: true, allowRareFish: true, rarity: "Epic", unlockDay: 8, unlockHint: "Day 8 后用 Rare 以上鱼制作" },
+  { id: "garden-seafood-pot", name: "菜园海鲜锅", emoji: "🥘", description: "高级鱼配上自种胡萝卜和番茄，像海上补给站的招牌套餐。", output: "deluxeSeafoodPot", fixedCost: { carrot: 1, tomato: 1, water: 1 }, fishCount: 1, rareFishOnly: true, allowRareFish: true, rarity: "Epic", unlockDay: 9, unlockHint: "Day 9 后解锁" },
   { id: "survivor-feast", name: "漂流者豪华套餐", emoji: "🍱", description: "高级鱼、蔬菜和肉片摆满桌，像给自己办了一场庆功宴。", output: "survivorFeast", fixedCost: { veggiePack: 1, meatSlices: 1, chocolate: 1, water: 1 }, fishCount: 1, rareFishOnly: true, allowRareFish: true, rarity: "Legendary", unlockDay: 10, unlockHint: "Day 10 后解锁" },
 ];
 
@@ -374,10 +419,15 @@ export const cards: Card[] = [
   { id: "plastic", name: "塑料", rarity: "Common", emoji: "🧴", description: "轻轻漂着的基础材料。", itemId: "plastic", amount: 3 },
   { id: "fish-snack", name: "海味小礼包", rarity: "Common", emoji: "🐟", description: "随机获得 2 条 Common 鱼。", fishRarity: "Common", amount: 2 },
   { id: "water", name: "淡水", rarity: "Common", emoji: "💧", description: "干净淡水，做饭和生存都需要。", itemId: "water", amount: 2 },
+  { id: "lettuce-seeds", name: "生菜种子包", rarity: "Common", emoji: "🌱", description: "适合漂浮菜园的入门种子。", itemId: "lettuceSeed", amount: 2 },
+  { id: "tomato-seeds", name: "番茄种子包", rarity: "Common", emoji: "🌱", description: "海风里也能发芽的小番茄种子。", itemId: "tomatoSeed", amount: 2 },
   { id: "scrap", name: "铁片", rarity: "Rare", emoji: "🔩", description: "能让木筏更结实的金属材料。", itemId: "scrap", amount: 3 },
   { id: "rare-fish-box", name: "稀有鱼罐", rarity: "Rare", emoji: "🐠", description: "随机获得 1 条 Rare 鱼。", fishRarity: "Rare", amount: 1 },
   { id: "hotpot-base", name: "火锅底料", rarity: "Rare", emoji: "🌶️", description: "漂流火锅的灵魂。", itemId: "hotpotBase", amount: 1 },
   { id: "furniture-ticket", name: "家具券", rarity: "Rare", emoji: "🎟️", description: "可以布置一件随机家具。", itemId: "furnitureTicket", amount: 1 },
+  { id: "planter-box", name: "种植箱", rarity: "Rare", emoji: "🪴", description: "固定在木筏边缘的小菜园箱。", itemId: "planterBox", amount: 1 },
+  { id: "root-seeds", name: "根茎种子包", rarity: "Rare", emoji: "🥕", description: "包含土豆和胡萝卜种子。", itemId: "carrotSeed", amount: 2 },
+  { id: "pepper-seeds", name: "辣椒种子包", rarity: "Rare", emoji: "🌶️", description: "给海上料理一点暖辣味。", itemId: "pepperSeed", amount: 1 },
   { id: "advanced-rod", name: "高级鱼竿", rarity: "Epic", emoji: "🎣", description: "提高 Rare 和 Epic 鱼出现概率。", equipment: "advancedRod" },
   { id: "water-purifier", name: "自动净水器", rarity: "Epic", emoji: "🚰", description: "每天结束时额外获得 1 份淡水。", equipment: "waterPurifier" },
   { id: "sofa", name: "豪华沙发", rarity: "Epic", emoji: "🛋️", description: "让漂流小屋立刻像家。", furniture: "豪华沙发" },
@@ -389,7 +439,7 @@ export const cards: Card[] = [
   { id: "permit", name: "海上便利店许可证", rarity: "Legendary", emoji: "🏪", description: "你的海上商业梦开始发光。", equipment: "shopPermit" },
 ];
 
-export const furniturePool = ["小木桌", "防水床垫", "海上火锅桌", "贝壳灯", "豪华沙发", "迷你温泉"];
+export const furniturePool = ["小木桌", "防水床垫", "海上火锅桌", "贝壳灯", "豪华沙发", "迷你温泉", "种植箱"];
 
 export const upgradeRequirements: Partial<Record<BoatLevel, Partial<Record<ItemId, number>> & { coins?: number }>> = {
   1: { wood: 10, rope: 5, scrap: 3 },
@@ -428,6 +478,7 @@ export function createInitialState(): GameState {
     firstCookedRecipeIds: [],
     fishingMode: "miniGame",
     orders: [],
+    garden: [],
     lastMoodStatus: "状态很好",
     logs: [
       {
