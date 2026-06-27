@@ -18,7 +18,7 @@ import {
   upgradeRequirements,
   weatherList,
 } from "./data";
-import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishRarity, GameState, GardenPlot, ItemId, LogType, Rarity, Recipe, SeaOrder, TalentId, TradePrices, Weather } from "./types";
+import { BoatLevel, CatFeedOption, CatState, CatType, Fish, FishingCatchRating, FishRarity, GameState, GardenPlot, ItemId, LogType, Rarity, Recipe, SeaOrder, TalentId, TradePrices, Weather } from "./types";
 
 const STORAGE_KEY = "drift-crate-save";
 const SAVE_SLOTS_KEY = "drift-crate-save-slots";
@@ -249,7 +249,7 @@ export function getCatFeedOptions(state: GameState): CatFeedOption[] {
   ].filter(Boolean) as CatFeedOption[];
 }
 
-function weightedRarity(state: GameState): FishRarity {
+function weightedRarity(state: GameState, bonus = 0): FishRarity {
   const weights: Record<FishRarity, number> = {
     Common: 55,
     Uncommon: 25,
@@ -257,6 +257,13 @@ function weightedRarity(state: GameState): FishRarity {
     Epic: 5,
     Legendary: 1,
   };
+  if (bonus > 0) {
+    weights.Common -= bonus * 7;
+    weights.Uncommon += bonus * 1.5;
+    weights.Rare += bonus * 3.5;
+    weights.Epic += bonus * 1.5;
+    weights.Legendary += bonus * 0.5;
+  }
 
   if (state.talent === "fishing") {
     weights.Common -= 6;
@@ -505,20 +512,62 @@ export function fish(state: GameState): GameState {
   return next;
 }
 
-export function fishWithMiniGame(state: GameState, result: "fail" | "success" | "perfect"): GameState {
-  if (result === "fail") {
-    const hungerLoss = state.talent === "fishing" ? 2 : 4;
-    return addLog({ ...state, hunger: clamp(state.hunger - hungerLoss) }, "warning", "鱼跑了", `收杆慢了一点，鱼从钩边溜走了。Hunger -${hungerLoss}。`, [`Hunger -${hungerLoss}`]);
-  }
-  if (result === "success") return fish(state);
+export function fishWithMiniGame(state: GameState, rating: FishingCatchRating): GameState {
   if (state.hunger <= 0) return addLog(state, "warning", "体力不足", "你饿得头晕，先找点吃的再钓鱼吧。");
-  const rareRoll = Math.random();
-  const targetRarity: FishRarity = rareRoll < 0.08 ? "Legendary" : rareRoll < 0.22 ? "Epic" : rareRoll < 0.58 ? "Rare" : weightedRarity(state);
-  const caught = pickFish(state, targetRarity);
-  const amount = state.equipment.includes("goldenRod") && Math.random() < 0.35 ? 2 : 1;
-  const resultState = addFish({ ...state, hunger: clamp(state.hunger - 5), mood: clamp(state.mood + (state.equipment.includes("goldenRod") ? 2 : 1)) }, caught, amount);
-  let next = addLog(resultState.state, "fishing", "完美收杆", `完美收杆！你钓到了「${caught.name}」x${amount}。`, [`${caught.emoji} ${caught.name} x${amount}`, `Mood +${state.equipment.includes("goldenRod") ? 2 : 1}`], true);
-  if (resultState.isNew) next = addLog(next, "discovery", "新发现", `首次钓到「${caught.name}」！已加入钓鱼图鉴。`, [caught.rarity], true, true);
+  const label: Record<FishingCatchRating, string> = {
+    perfect: "完美收杆",
+    good: "良好收杆",
+    normal: "普通收杆",
+    weak: "勉强收杆",
+    fail: "鱼跑了",
+  };
+  if (rating === "fail") {
+    const hungerLoss = state.talent === "fishing" ? 2 : 4;
+    if (state.talent === "fishing" && Math.random() < 0.22) {
+      const caught = pickFish(state, "Common");
+      const result = addFish({ ...state, hunger: clamp(state.hunger - hungerLoss) }, caught, 1);
+      let next = addLog(result.state, "fishing", "钓鱼高手保底", `鱼差点跑了，但你还是捞回了「${caught.name}」x1。`, [`${caught.emoji} ${caught.name} x1`, `Hunger -${hungerLoss}`]);
+      if (result.isNew) next = addLog(next, "discovery", "新发现", `首次钓到「${caught.name}」！已加入钓鱼图鉴。`, [caught.rarity], true, true);
+      return next;
+    }
+    return addLog({ ...state, hunger: clamp(state.hunger - hungerLoss) }, "warning", "鱼跑了", `收杆慢了一点，鱼从钩边溜走了。Hunger -${hungerLoss}。`, [`收杆评级：${label[rating]}`, `Hunger -${hungerLoss}`]);
+  }
+
+  if (rating === "weak") {
+    const fishChance = 0.38 + (state.talent === "fishing" ? 0.18 : 0) + (state.mood >= 80 ? 0.08 : 0) - (state.mood < 30 ? 0.1 : 0);
+    if (Math.random() > fishChance) {
+      const junk = pick(["seaweed", "oldBoot"] as ItemId[]);
+      return addLog(addItem({ ...state, hunger: clamp(state.hunger - 4) }, junk, 1), "fishing", "勉强收杆", `你勉强把钩子拉回来，只挂到了${itemNames[junk]}。`, [`收杆评级：${label[rating]}`, `${itemEmoji[junk]} ${itemNames[junk]} x1`]);
+    }
+  }
+
+  const amount = rating === "perfect"
+    ? 2 + ((state.equipment.includes("goldenRod") ? Math.random() < 0.55 : Math.random() < 0.28) ? 1 : 0)
+    : rating === "good"
+      ? 1 + ((state.equipment.includes("goldenRod") ? Math.random() < 0.45 : Math.random() < 0.25) ? 1 : 0)
+      : 1;
+  const rarityBonus = rating === "perfect" ? 2.3 + (state.mood >= 80 ? 0.4 : 0) : rating === "good" ? 0.9 : 0;
+  let next: GameState = { ...state, hunger: clamp(state.hunger - (rating === "weak" ? 4 : 5)), mood: clamp(state.mood + (rating === "perfect" ? 1 : 0)) };
+  const caughtSummary = new Map<string, { fish: Fish; count: number; isNew: boolean }>();
+  for (let i = 0; i < amount; i += 1) {
+    const caught = pickFish(next, rating === "weak" ? "Common" : weightedRarity(next, rarityBonus));
+    const result = addFish(next, caught, 1);
+    next = result.state;
+    const previous = caughtSummary.get(caught.id);
+    caughtSummary.set(caught.id, { fish: caught, count: (previous?.count ?? 0) + 1, isNew: Boolean(previous?.isNew || result.isNew) });
+  }
+  const rewards = Array.from(caughtSummary.values()).map((item) => `${item.fish.emoji} ${item.fish.name} x${item.count}`);
+  next = addLog(
+    next,
+    "fishing",
+    label[rating],
+    `${label[rating]}！你获得了 ${rewards.join("、")}。`,
+    [`收杆评级：${label[rating]}`, ...rewards, ...(rating === "perfect" ? ["Mood +1", "稀有率大幅提升"] : rating === "good" ? ["稀有率小幅提升"] : [])],
+    Array.from(caughtSummary.values()).some((item) => item.fish.rarity === "Epic" || item.fish.rarity === "Legendary") || rating === "perfect",
+  );
+  Array.from(caughtSummary.values()).filter((item) => item.isNew).forEach((item) => {
+    next = addLog(next, "discovery", "新发现", `首次钓到「${item.fish.name}」！已加入钓鱼图鉴。`, [item.fish.rarity], true, true);
+  });
   return next;
 }
 

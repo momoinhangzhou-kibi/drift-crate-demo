@@ -58,7 +58,7 @@ import {
 } from "./game/logic";
 import type { SaveSummary } from "./game/logic";
 import type { SaveSlot } from "./game/logic";
-import { CatFeedOption, CatOption, CatState, CatType, Fish, FishingMode, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, SeaOrder, ShopItem, TalentId } from "./game/types";
+import { CatFeedOption, CatOption, CatState, CatType, Fish, FishingCatchRating, FishingMode, FishRarity, Food, GameState, ItemCategory, ItemId, LogEntry, LogType, Rarity, Recipe, SeaOrder, ShopItem, TalentId } from "./game/types";
 
 const materialOrder: ItemId[] = [
   "wood",
@@ -1785,15 +1785,21 @@ function getFishingZones(state: GameState) {
   else if (state.mood < 40) successWidth -= 8;
   const success = Math.max(22, Math.min(68, successWidth));
   const perfect = Math.max(6, Math.min(18, perfectWidth));
+  const weak = Math.min(92, success + 18);
+  const good = Math.max(perfect + 8, success * 0.58);
   return {
+    weakStart: 50 - weak / 2,
+    weakEnd: 50 + weak / 2,
     successStart: 50 - success / 2,
     successEnd: 50 + success / 2,
+    goodStart: 50 - good / 2,
+    goodEnd: 50 + good / 2,
     perfectStart: 50 - perfect / 2,
     perfectEnd: 50 + perfect / 2,
   };
 }
 
-function FishingMiniGame({ state, onClose, onFinish }: { state: GameState; onClose: () => void; onFinish: (result: "fail" | "success" | "perfect") => void }) {
+function FishingMiniGame({ state, onClose, onFinish }: { state: GameState; onClose: () => void; onFinish: (result: FishingCatchRating) => void }) {
   const [pointer, setPointer] = useState(0);
   const [direction, setDirection] = useState(1);
   const zones = getFishingZones(state);
@@ -1824,11 +1830,15 @@ function FishingMiniGame({ state, onClose, onFinish }: { state: GameState; onClo
   }, [direction]);
 
   const reelIn = () => {
-    const result = pointer >= zones.perfectStart && pointer <= zones.perfectEnd
+    const result: FishingCatchRating = pointer >= zones.perfectStart && pointer <= zones.perfectEnd
       ? "perfect"
-      : pointer >= zones.successStart && pointer <= zones.successEnd
-        ? "success"
-        : "fail";
+      : pointer >= zones.goodStart && pointer <= zones.goodEnd
+        ? "good"
+        : pointer >= zones.successStart && pointer <= zones.successEnd
+          ? "normal"
+          : pointer >= zones.weakStart && pointer <= zones.weakEnd
+            ? "weak"
+            : "fail";
     onFinish(result);
   };
 
@@ -1840,13 +1850,16 @@ function FishingMiniGame({ state, onClose, onFinish }: { state: GameState; onClo
         <h2>看准时机收杆</h2>
         <p>{rodName} · Mood {state.mood}（{getMoodStatus(state.mood)}）</p>
         <div className="fishing-meter">
+          <span className="weak-zone" style={{ left: `${zones.weakStart}%`, width: `${zones.weakEnd - zones.weakStart}%` }} />
           <span className="success-zone" style={{ left: `${zones.successStart}%`, width: `${zones.successEnd - zones.successStart}%` }} />
+          <span className="good-zone" style={{ left: `${zones.goodStart}%`, width: `${zones.goodEnd - zones.goodStart}%` }} />
           <span className="perfect-zone" style={{ left: `${zones.perfectStart}%`, width: `${zones.perfectEnd - zones.perfectStart}%` }} />
           <span className="fishing-pointer" style={{ left: `${pointer}%` }} />
         </div>
         <div className="fishing-legend">
-          <span><i className="legend-success" /> 成功</span>
-          <span><i className="legend-perfect" /> 完美：稀有率提升</span>
+          <span><i className="legend-weak" /> 勉强</span>
+          <span><i className="legend-success" /> 普通/良好</span>
+          <span><i className="legend-perfect" /> 完美：多鱼+稀有率</span>
         </div>
         <div className="modal-actions">
           <button onClick={onClose}>放弃</button>

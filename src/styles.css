@@ -1309,7 +1309,9 @@ p {
   box-shadow: inset 0 4px 10px rgba(38, 100, 128, 0.16);
 }
 
+.fishing-meter .weak-zone,
 .fishing-meter .success-zone,
+.fishing-meter .good-zone,
 .fishing-meter .perfect-zone,
 .fishing-meter .fishing-pointer {
   position: absolute;
@@ -1317,8 +1319,16 @@ p {
   bottom: 0;
 }
 
+.fishing-meter .weak-zone {
+  background: rgba(255, 230, 157, 0.45);
+}
+
 .fishing-meter .success-zone {
   background: rgba(126, 220, 166, 0.62);
+}
+
+.fishing-meter .good-zone {
+  background: rgba(91, 202, 232, 0.55);
 }
 
 .fishing-meter .perfect-zone {
@@ -1353,6 +1363,10 @@ p {
 
 .legend-success {
   background: #7edca6;
+}
+
+.legend-weak {
+  background: #ffe69d;
 }
 
 .legend-perfect {

@@ -69,6 +69,8 @@ export type ItemId =
   | "lettuce"
   | "pepper"
   | "planterBox"
+  | "seaweed"
+  | "oldBoot"
   | "commonFish"
   | "rareFish"
   | "mysteryFish";
@@ -224,6 +226,7 @@ export interface LogEntry {
 }
 
 export type FishingMode = "miniGame" | "quick";
+export type FishingCatchRating = "perfect" | "good" | "normal" | "weak" | "fail";
 export type OrderKind = "food" | "material" | "fish" | "crop" | "cat" | "rescue";
 
 export interface SeaOrder {
