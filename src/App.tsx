@@ -29,6 +29,7 @@ import {
   getSaveSlots,
   getMoodStatus,
   getReputationInfo,
+  getLuckyMachineCost,
   getSurvivalInfo,
   hasEdibleFood,
   hasFishToSell,
@@ -56,6 +57,8 @@ import {
   sellCrop,
   seedCatalog,
   startGame,
+  spinLuckyMachine,
+  isLuckyMachineUnlocked,
   upgradeBoat,
   useUtilityItem,
 } from "./game/logic";
@@ -81,7 +84,7 @@ const foodOrder: ItemId[] = ["grilledFish", "fishSoup", "grilledFishSkewer", "se
 const categoryLabels: Record<ItemCategory | "all", string> = { all: "全部", materials: "材料", food: "食物", seeds: "种子", crops: "作物", tools: "工具", hygiene: "卫生", furniture: "家具", equipment: "装备", special: "特殊" };
 
 type ViewState = "title" | "talentSelect" | "catSelect" | "playing" | "loadMenu";
-type ModulePanel = "inventory" | "shop" | "orders" | "garden" | "dex" | "recipes" | "journal" | "cat" | "home" | "guide" | "settings";
+type ModulePanel = "inventory" | "shop" | "orders" | "garden" | "dex" | "recipes" | "journal" | "cat" | "home" | "lucky" | "guide" | "settings";
 type TitlePanel = "dex" | "settings";
 type FeedbackRarity = Rarity | FishRarity | "Uncommon";
 type FeedbackLine = {
@@ -859,6 +862,7 @@ function App() {
           onPlayCat={() => applyAction("陪猫玩", playWithCat(state))}
           onExploreCat={() => applyAction("猫猫探索", exploreWithCat(state))}
           onDecorate={() => applyAction("布置家具", decorate(state))}
+          onSpinLucky={(mode) => applyAction(mode === "normal" ? "普通贝壳抽奖" : "幸运贝壳抽奖", spinLuckyMachine(state, mode))}
           onFurnitureSelect={setSelectedFurniture}
           onToggleMusic={toggleMusic}
           musicOn={musicOn}
@@ -1192,6 +1196,7 @@ const moduleItems: { id: ModulePanel; icon: string; label: string }[] = [
   { id: "journal", icon: "日", label: "日记" },
   { id: "cat", icon: "猫", label: "猫猫" },
   { id: "home", icon: "家", label: "家具" },
+  { id: "lucky", icon: "🐚", label: "贝壳机" },
   { id: "guide", icon: "📘", label: "漂流指南" },
   { id: "settings", icon: "设", label: "设置" },
 ];
@@ -1232,6 +1237,7 @@ function GameModulePanel({
   onPlayCat,
   onExploreCat,
   onDecorate,
+  onSpinLucky,
   onFurnitureSelect,
   musicOn,
   musicMode,
@@ -1270,6 +1276,7 @@ function GameModulePanel({
   onPlayCat: () => void;
   onExploreCat: () => void;
   onDecorate: () => void;
+  onSpinLucky: (mode: "normal" | "lucky") => void;
   onFurnitureSelect: (furniture: string) => void;
   musicOn: boolean;
   musicMode: MusicMode;
@@ -1350,6 +1357,8 @@ function GameModulePanel({
           </div>
         )}
 
+        {panel === "lucky" && <LuckyShellMachinePanel state={state} onSpin={onSpinLucky} />}
+
         {panel === "guide" && <PlayerGuidePanel />}
 
         {panel === "settings" && (
@@ -1404,6 +1413,71 @@ function GameModulePanel({
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function LuckyShellMachinePanel({ state, onSpin }: { state: GameState; onSpin: (mode: "normal" | "lucky") => void }) {
+  const unlocked = isLuckyMachineUnlocked(state);
+  const machine = state.luckyMachine?.lastSpinDay === state.day
+    ? state.luckyMachine
+    : { normalSpinsToday: 0, luckySpinsToday: 0, pityCount: state.luckyMachine?.pityCount ?? 0, lastSpinDay: state.day, lastResult: state.luckyMachine?.lastResult };
+  const normalCost = getLuckyMachineCost("normal");
+  const luckyCost = getLuckyMachineCost("lucky");
+  const symbols = machine.lastResult?.symbols ?? ["🐟", "🐚", "⭐"];
+  const normalDisabled = !unlocked || state.coins < normalCost.coins || machine.normalSpinsToday >= normalCost.limit;
+  const luckyDisabled = !unlocked || (state.inventory.luckyShell ?? 0) < luckyCost.luckyShell || machine.luckySpinsToday >= luckyCost.limit;
+  const tierText = machine.lastResult?.tier === "jackpot"
+    ? "上次：三个一样，中大奖！"
+    : machine.lastResult?.tier === "match"
+      ? "上次：两个一样，有奖励。"
+      : machine.lastResult
+        ? "上次：安慰奖，也不空手。"
+        : "转一转，看看今天海浪带来什么。";
+
+  return (
+    <div className="lucky-machine-panel">
+      <div className="lucky-machine-hero">
+        <div>
+          <p className="eyebrow">Cozy Prize Machine</p>
+          <h3>幸运贝壳机</h3>
+          <p>只使用游戏内资源。三个一样中大奖，两个一样有奖励，没有一样也有安慰奖。</p>
+        </div>
+        <div className="lucky-bank">
+          <span>贝壳币 <b>{state.coins}</b></span>
+          <span>幸运贝壳 <b>{state.inventory.luckyShell ?? 0}</b></span>
+        </div>
+      </div>
+
+      {!unlocked && (
+        <div className="lucky-locked">
+          海上补给站还不够热闹，等名声提高后也许会有人送来一台幸运贝壳机。
+          <small>解锁条件：Boat Lv.3 或名声 Lv.2。</small>
+        </div>
+      )}
+
+      <div className={`lucky-reels tier-${machine.lastResult?.tier ?? "idle"}`}>
+        {symbols.map((symbol, index) => <span key={`${symbol}-${index}`}>{symbol}</span>)}
+      </div>
+      <p className="lucky-result-note">{tierText}</p>
+
+      <div className="lucky-spin-grid">
+        <button className="primary-action" disabled={normalDisabled} onClick={() => onSpin("normal")}>
+          普通抽奖
+          <small>消耗 50 贝壳币 · 今日 {machine.normalSpinsToday}/{normalCost.limit}</small>
+        </button>
+        <button className="primary-action lucky-spin" disabled={luckyDisabled} onClick={() => onSpin("lucky")}>
+          幸运抽奖
+          <small>消耗 幸运贝壳 x1 · 今日 {machine.luckySpinsToday}/{luckyCost.limit}</small>
+        </button>
+      </div>
+
+      <div className="lucky-rules">
+        <span>大奖：家具券 / 高级补给包 / 幸运贝壳 / 稀有种子 / 稀有材料 / 小家具</span>
+        <span>中奖：普通补给包 / 种子 / 铁片胶带螺丝 / 普通鱼 / 少量返还 / 作物</span>
+        <span>安慰奖：木板 / 绳子 / 塑料 / 海草 / 少量贝壳币 / 猫猫心情 +1</span>
+        <span>保底：普通抽奖连续 5 次安慰奖后，下一次至少两个一样。</span>
+      </div>
     </div>
   );
 }

@@ -496,6 +496,7 @@ export function createInitialState(): GameState {
     lastDangerStatus: "",
     orders: [],
     garden: [],
+    luckyMachine: { normalSpinsToday: 0, luckySpinsToday: 0, pityCount: 0, lastSpinDay: 1 },
     lastMoodStatus: "状态很好",
     logs: [
       {

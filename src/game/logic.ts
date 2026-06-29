@@ -67,6 +67,20 @@ function pick<T>(list: T[]) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
+function normalizeLuckyMachine(state: GameState) {
+  const machine = state.luckyMachine ?? { normalSpinsToday: 0, luckySpinsToday: 0, pityCount: 0, lastSpinDay: state.day };
+  if (machine.lastSpinDay === state.day) return machine;
+  return { ...machine, normalSpinsToday: 0, luckySpinsToday: 0, lastSpinDay: state.day };
+}
+
+export function isLuckyMachineUnlocked(state: GameState) {
+  return state.boatLevel >= 3 || getReputationInfo(state.reputation ?? 0).level >= 2;
+}
+
+export function getLuckyMachineCost(mode: "normal" | "lucky") {
+  return mode === "normal" ? { coins: 50, luckyShell: 0, limit: 10 } : { coins: 0, luckyShell: 1, limit: 3 };
+}
+
 export function getMoodStatus(mood: number) {
   if (mood >= 80) return "状态很好";
   if (mood >= 60) return "平稳";
@@ -1085,6 +1099,154 @@ export function useUtilityItem(state: GameState, itemId: ItemId): GameState {
   return addLog(state, "warning", "使用物品", `${itemNames[itemId]}需要在对应场景中自动生效。`);
 }
 
+type LuckySpinMode = "normal" | "lucky";
+type LuckySpinTier = "jackpot" | "match" | "comfort";
+
+const luckySymbols = ["🐟", "🌱", "木", "券", "贝", "爪", "箱", "星"];
+
+function rollLuckySymbols(mode: LuckySpinMode, forceMatch: boolean, mood: number) {
+  const jackpotChance = (mode === "lucky" ? 0.035 : 0.012) + (mood >= 80 ? 0.006 : 0);
+  const matchChance = (mode === "lucky" ? 0.32 : 0.22) + (mood >= 80 ? 0.035 : 0);
+  if (Math.random() < jackpotChance) {
+    const symbol = pick(luckySymbols);
+    return [symbol, symbol, symbol];
+  }
+  if (forceMatch || Math.random() < matchChance) {
+    const match = pick(luckySymbols);
+    const other = pick(luckySymbols.filter((symbol) => symbol !== match));
+    return Math.random() < 0.5 ? [match, match, other] : [match, other, match];
+  }
+  let symbols = [pick(luckySymbols), pick(luckySymbols), pick(luckySymbols)];
+  let guard = 0;
+  while (new Set(symbols).size < 3 && guard < 12) {
+    symbols = [pick(luckySymbols), pick(luckySymbols), pick(luckySymbols)];
+    guard += 1;
+  }
+  return symbols;
+}
+
+function getLuckyTier(symbols: string[]): LuckySpinTier {
+  const unique = new Set(symbols).size;
+  if (unique === 1) return "jackpot";
+  if (unique === 2) return "match";
+  return "comfort";
+}
+
+function applyLuckyReward(state: GameState, mode: LuckySpinMode, tier: LuckySpinTier) {
+  let next = state;
+  const rewards: string[] = [];
+  const addReward = (itemId: ItemId, amount: number) => {
+    next = addItem(next, itemId, amount);
+    rewards.push(`${itemNames[itemId]} x${amount}`);
+  };
+  const addCoins = (amount: number) => {
+    next = { ...next, coins: next.coins + amount };
+    rewards.push(`贝壳币 +${amount}`);
+  };
+
+  if (tier === "jackpot") {
+    const jackpotPool: Array<() => void> = [
+      () => addReward("furnitureTicket", 1),
+      () => addReward("premiumCrate", 1),
+      () => addReward("luckyShell", mode === "lucky" ? 2 : 1),
+      () => addReward(pick(["pepperSeed", "carrotSeed", "tomatoSeed"] as ItemId[]), randomInt(2, 3)),
+      () => {
+        addReward("scrap", randomInt(2, 4));
+        addReward("screw", randomInt(1, 3));
+      },
+      () => addReward(pick(["shellLamp", "foldingChair", "storageBox"] as ItemId[]), 1),
+    ];
+    pick(jackpotPool)();
+    return { next, rewards };
+  }
+
+  if (tier === "match") {
+    const matchPool: Array<() => void> = [
+      () => addReward("commonCrate", 1),
+      () => addReward(pick(["lettuceSeed", "tomatoSeed", "potatoSeed", "carrotSeed"] as ItemId[]), 2),
+      () => addReward(pick(["scrap", "tape", "screw"] as ItemId[]), randomInt(1, 2)),
+      () => {
+        const bonusFish = pick(fishList.filter((fishItem) => fishItem.rarity === "Common"));
+        const amount = randomInt(1, 2);
+        const result = addFish(next, bonusFish, amount);
+        next = result.state;
+        rewards.push(`${bonusFish.name} x${amount}`);
+      },
+      () => addCoins(randomInt(12, mode === "lucky" ? 30 : 22)),
+      () => addReward(pick(["tomato", "potato", "carrot", "lettuce"] as ItemId[]), randomInt(1, 3)),
+    ];
+    pick(matchPool)();
+    return { next, rewards };
+  }
+
+  const comfortPool: Array<() => void> = [
+    () => addReward("wood", 1),
+    () => addReward("rope", 1),
+    () => addReward("plastic", 1),
+    () => addReward("seaweed", 1),
+    () => addCoins(randomInt(5, 10)),
+    () => {
+      next = updateCat(next, { mood: (next.cat?.mood ?? 70) + 1, todayEvent: `${next.cat?.name ?? "猫猫"}盯着贝壳机看了很久，尾巴轻轻晃了一下。` });
+      rewards.push("猫猫心情 +1");
+    },
+  ];
+  pick(comfortPool)();
+  return { next, rewards };
+}
+
+export function spinLuckyMachine(state: GameState, mode: LuckySpinMode): GameState {
+  const machine = normalizeLuckyMachine(state);
+  const cost = getLuckyMachineCost(mode);
+  const spinsToday = mode === "normal" ? machine.normalSpinsToday : machine.luckySpinsToday;
+
+  if (!isLuckyMachineUnlocked(state)) {
+    return addLog({ ...state, luckyMachine: machine }, "warning", "幸运贝壳机", "海上补给站还不够热闹，等名声提高后也许会有人送来一台幸运贝壳机。");
+  }
+  if (spinsToday >= cost.limit) {
+    return addLog({ ...state, luckyMachine: machine }, "warning", "幸运贝壳机", mode === "normal" ? "今天普通抽奖次数已经用完，明天再来转转吧。" : "今天幸运抽奖次数已经用完，先把幸运攒到明天。");
+  }
+  if (mode === "normal" && state.coins < cost.coins) {
+    return addLog({ ...state, luckyMachine: machine }, "warning", "贝壳币不足", `普通抽奖需要 ${cost.coins} 贝壳币，还差 ${cost.coins - state.coins}。`);
+  }
+  if (mode === "lucky" && (state.inventory.luckyShell ?? 0) < cost.luckyShell) {
+    return addLog({ ...state, luckyMachine: machine }, "warning", "幸运贝壳不足", "幸运抽奖需要幸运贝壳 x1。");
+  }
+
+  const forceMatch = mode === "normal" && machine.pityCount >= 5;
+  const symbols = rollLuckySymbols(mode, forceMatch, state.mood);
+  const tier = getLuckyTier(symbols);
+  let next: GameState = mode === "normal"
+    ? { ...state, coins: state.coins - cost.coins }
+    : addItem(state, "luckyShell", -cost.luckyShell);
+  next = {
+    ...next,
+    luckyMachine: {
+      normalSpinsToday: machine.normalSpinsToday + (mode === "normal" ? 1 : 0),
+      luckySpinsToday: machine.luckySpinsToday + (mode === "lucky" ? 1 : 0),
+      pityCount: tier === "comfort" ? machine.pityCount + 1 : 0,
+      lastSpinDay: state.day,
+      lastResult: { symbols, tier, mode },
+    },
+  };
+
+  const rewardResult = applyLuckyReward(next, mode, tier);
+  next = rewardResult.next;
+  const tierText = tier === "jackpot" ? "三个一样，中大奖！" : tier === "match" ? "两个一样，有奖励！" : "没有一样，获得安慰奖。";
+  const pityText = forceMatch ? "连续几次没中后，贝壳机轻轻亮了一下，保底触发。" : undefined;
+  const moodText = state.mood >= 80 ? "Mood 很好：今天手气微微发亮。" : undefined;
+  const catText = symbols.includes("爪") ? `${state.cat?.name ?? "猫猫"}对猫爪图案很满意。` : undefined;
+  const notes = [pityText, moodText, catText].filter(Boolean) as string[];
+  return addLog(
+    next,
+    tier === "jackpot" ? "discovery" : "event",
+    "幸运贝壳机",
+    `你转动了幸运贝壳机，图案停在 ${symbols.join(" ")}。${tierText}`,
+    [...rewardResult.rewards, ...notes],
+    tier === "jackpot",
+    tier === "jackpot",
+  );
+}
+
 export function noteNoFood(state: GameState): GameState {
   return addLog(state, "warning", "进食", "你翻了翻背包，但没有可以吃的东西。");
 }
@@ -1592,6 +1754,7 @@ export function endDay(state: GameState): GameState {
     newestFishId: undefined,
     shopStock: state.day % 7 === 0 ? createShopStock(state.day + 1) : state.shopStock,
     orders: createDailyOrders(state.day + 1, state.boatLevel, state.reputation ?? 0),
+    luckyMachine: { ...normalizeLuckyMachine(state), normalSpinsToday: 0, luckySpinsToday: 0, lastSpinDay: state.day + 1 },
   };
 
   if (state.day % 7 === 0) next = addLog(next, "trade", "潮汐商店", "潮汐商店刷新了新的库存。");
@@ -1728,8 +1891,16 @@ function migrateState(raw: Partial<GameState>): GameState {
 
   const fishDexRewardsClaimed = Array.isArray(raw.fishDexRewardsClaimed) ? raw.fishDexRewardsClaimed : [];
   const firstCookedRecipeIds = Array.isArray(raw.firstCookedRecipeIds) ? raw.firstCookedRecipeIds.filter((id): id is string => typeof id === "string") : [];
+  const rawMachine = raw.luckyMachine;
+  const luckyMachine = {
+    normalSpinsToday: Math.max(0, Number(rawMachine?.normalSpinsToday ?? 0)),
+    luckySpinsToday: Math.max(0, Number(rawMachine?.luckySpinsToday ?? 0)),
+    pityCount: Math.max(0, Number(rawMachine?.pityCount ?? 0)),
+    lastSpinDay: Number(rawMachine?.lastSpinDay ?? raw.day ?? initial.day),
+    lastResult: rawMachine?.lastResult,
+  };
 
-  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, salvageMode, reputation, weatherEffect, lastDangerStatus, orders, garden, lastMoodStatus };
+  return { ...initial, ...raw, inventory, fishCollection, fishPrices, shopStock, cat, logs, fishDexRewardsClaimed, firstCookedRecipeIds, fishingMode, salvageMode, reputation, weatherEffect, lastDangerStatus, orders, garden, luckyMachine, lastMoodStatus };
 }
 
 function readLegacySavedPayload(): { state: GameState; savedAt?: string } | undefined {

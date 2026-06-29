@@ -268,6 +268,18 @@ export interface GardenPlot {
   totalDays: number;
 }
 
+export interface LuckyMachineState {
+  normalSpinsToday: number;
+  luckySpinsToday: number;
+  pityCount: number;
+  lastSpinDay: number;
+  lastResult?: {
+    symbols: string[];
+    tier: "jackpot" | "match" | "comfort" | "blocked";
+    mode?: "normal" | "lucky";
+  };
+}
+
 export type FishPrices = Record<string, number>;
 
 export interface TradePrices {
@@ -305,6 +317,7 @@ export interface GameState {
   lastDangerStatus?: string;
   orders: SeaOrder[];
   garden: GardenPlot[];
+  luckyMachine: LuckyMachineState;
   lastMoodStatus?: string;
   gameOverReason?: string;
   tutorialSeen?: boolean;
